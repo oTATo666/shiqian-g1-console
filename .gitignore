@@ -24,8 +24,9 @@ printed_tickets_backup/
 *.lock
 *.tmp
 
-# Local config backups and secrets
+# Local config backups, generated ticket codes and secrets
 *.bak
+**/codes.csv
 .env
 .env.*
 secrets.*
