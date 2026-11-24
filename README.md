@@ -2,7 +2,12 @@
 
 面向宇树 G1 人形机器人的展台互动主控台：语音对话、动作回放、传感器遥测、视觉迎宾、出票与核销，全部在一个本地 Web 页面里完成。
 
-> 这是 **1.1.1 桥接修复版** 的源码仓库。完整免安装包（含 Python 运行时、语音模型、示例动作）请到 [Releases](../../releases/latest) 下载。
+> 这是 **1.1.1 桥接修复版** 的源码仓库。完整免安装包（含 Python 运行时、语音模型、示例动作）请到 [Releases](https://github.com/oTATo666/shiqian-g1-console/releases/latest) 下载。
+
+## 下载
+
+- [shiqian-console-1.1.1-portable-bridge-fix.zip](https://github.com/oTATo666/shiqian-g1-console/releases/download/v1.1.1/shiqian-console-1.1.1-portable-bridge-fix.zip)（123.4 MB）
+- SHA256：`F851529FCA49F505F86D9CB785EB07F4AE2AA63CBDC6A915B627593A22CE4F7E`
 
 ## 功能
 
