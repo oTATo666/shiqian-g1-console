@@ -1,0 +1,43 @@
+/* 自定义现代浅色滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* 终端等宽字体与微光效果 */
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* ------------------------------------------------------------------
+   状态色兜底
+   这些类由 app.js 在运行时拼出来（运行中 / 启动中 / 启动失败）。
+   Tailwind 的编译只扫描源码里的字面量，动态拼接的类可能扫不到，
+   所以在这里显式写一份，保证任何情况下状态颜色都对。
+   数值即 Tailwind v3 的默认调色板，重复定义不会冲突。
+   ------------------------------------------------------------------ */
+.text-emerald-600 { color: #059669; }
+.text-rose-600    { color: #e11d48; }
+.text-amber-600   { color: #d97706; }
+.text-slate-400   { color: #94a3b8; }
+.text-slate-500   { color: #64748b; }
+.text-slate-700   { color: #334155; }
+
+.bg-emerald-500   { background-color: #10b981; }
+.bg-rose-500      { background-color: #f43f5e; }
+.bg-amber-400     { background-color: #fbbf24; }
+.bg-slate-300     { background-color: #cbd5e1; }
+
+/* 启动失败时在日志行里高亮——日志是纯文本追加，这里只做颜色兜底 */
+.log-fail { color: #fda4af; }
+

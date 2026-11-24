@@ -1,0 +1,49 @@
+# 真机配置：直接下发到 G1（需要机器人处于调试模式 lowlevel）
+source:
+  kind: vmc
+  vmc_bind: 0.0.0.0
+  vmc_port: 39539
+  stale_ms: 400
+  completion: true
+  point_mode: "5"
+  calib_frames: 12
+  replay_path: ""
+  replay_fps: 60.0
+  replay_loop: true
+  synthetic_motion: walk
+
+retarget:
+  robot: unitree_g1
+  human_height: 1.75
+  solver: daqp
+  damping: 0.5
+  use_velocity_limit: true
+  offset_to_ground: false
+  lock_xy: true
+  smooth_alpha: 0.6      # 真机上比仿真再平滑一点，IMU 抖动不能全传下去
+  smooth_rot: 0.5
+  ik_config: "configs/ik/slimevr_pos_to_g1.json"
+
+output:
+  kind: dds
+  sim_mode: kinematic
+  sim_rate: 500
+  dds_iface: auto
+  dds_domain: 0
+  mode_machine: 5
+  ramp_s: 3.0            # 真机过渡慢一点
+  kp_scale: 1.0          # 跟踪不稳就往下调（0.7），先从软的来
+  kd_scale: 1.0
+
+safety:
+  clamp_limits: true
+  limit_margin_deg: 4.0
+  max_joint_speed: 20.0
+  max_jump_deg: 8.0      # 真机比仿真更保守
+  watchdog_ms: 250
+
+app:
+  control_hz: 60.0
+  preview_fps: 30.0
+  lookahead_ms: 0
+  record_dir: records

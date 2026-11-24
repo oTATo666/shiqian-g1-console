@@ -9,6 +9,12 @@
 - [shiqian-console-1.1.1-portable-bridge-fix.zip](https://github.com/oTATo666/shiqian-g1-console/releases/download/v1.1.1/shiqian-console-1.1.1-portable-bridge-fix.zip)（123.4 MB）
 - SHA256：`F851529FCA49F505F86D9CB785EB07F4AE2AA63CBDC6A915B627593A22CE4F7E`
 
+## G1 Toolbox
+
+`G1_Toolbox_20261124/` 收录了 **管道转换（BVH → G1）**、**实时动捕（SlimeVR → GMR → G1）**、**时迁控制台** 三套 GUI 的源码子集。
+
+完整 2.1 GB 免安装包（含 Python 3.10 运行时、PySide6、MuJoCo、模型、示例）见 [v1.1.1-toolbox](https://github.com/oTATo666/shiqian-g1-console/releases/tag/v1.1.1-toolbox)。
+
 ## 功能
 
 - **系统概览**：主控台、语音、核销、动作桥、传感器桥、视觉桥状态一屏可见

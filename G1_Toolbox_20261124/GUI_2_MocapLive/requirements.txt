@@ -1,0 +1,24 @@
+# MocapLive 依赖
+# 说明：GMR 本体不在这里（从 G1_DevKit/05_retarget/GMR 直接加 sys.path），
+#       smplx 也不需要（本项目不走 SMPL-X 路径）。
+#
+# 安装：pip install -r requirements.txt
+# 你的 g1 环境里通常已经有：mujoco numpy scipy torch opencv-python
+
+mujoco>=3.1
+numpy
+scipy
+torch            # GMR 的 kinematics_model 会 import（CPU 版即可）
+opencv-python    # GMR RobotMotionViewer 用
+mink>=0.4        # IK 求解（GMR 的核心依赖）
+loop_rate_limiters
+qpsolvers
+daqp             # mink 默认 QP 求解器，比 quadprog 稳
+python-osc>=1.8  # VMC 协议收发
+PySide6>=6.6     # 界面
+PyYAML
+rich
+tqdm
+psutil
+natsort
+imageio

@@ -1,0 +1,49 @@
+# MocapLive 默认配置（GUI 里改完可以「保存配置」覆盖这个文件）
+source:
+  kind: vmc              # vmc(SlimeVR) | replay(回放) | synthetic(合成动作，无硬件)
+  vmc_bind: 0.0.0.0
+  vmc_port: 39539        # SlimeVR 的 Port Out
+  stale_ms: 500          # 超过 0.5s 没新帧 → 判定断流并冻结
+  completion: true       # 点数不够 14 时用骨架补全
+  point_mode: "5"        # 5 = 只信 胸+双大腿+双小腿；auto = 收到什么信什么
+  calib_frames: 12       # 校准用几帧平均（站着不动 0.2s）
+  replay_path: ""
+  replay_fps: 60.0
+  replay_loop: true
+  synthetic_motion: walk
+
+retarget:
+  robot: unitree_g1
+  human_height: 1.75     # 填真实身高，重定向比例更准
+  solver: daqp
+  damping: 0.5
+  use_velocity_limit: true
+  offset_to_ground: false
+  lock_xy: true          # 原地模式：人走，机器人原地做动作
+  smooth_alpha: 0.55     # 位置平滑，越小越稳但越迟钝
+  smooth_rot: 0.45
+  ik_config: "configs/ik/slimevr_pos_to_g1.json"  # SlimeVR 专用：四肢纯位置 IK（由 tools/make_ik_config.py 生成）
+
+output:
+  kind: sim              # sim | dds | none
+  sim_mode: kinematic    # kinematic(看动作) | physics(PD 跟踪 + 吊带)
+  sim_rate: 500
+  dds_iface: auto
+  dds_domain: 0
+  mode_machine: 5        # 你的 G1 是 g1_29dof_rev_1_0 → 5
+  ramp_s: 2.5
+  kp_scale: 1.0
+  kd_scale: 1.0
+
+safety:
+  clamp_limits: true
+  limit_margin_deg: 3.0
+  max_joint_speed: 20.0  # rad/s（髋 roll 实机只有 20，别按 32 写）
+  max_jump_deg: 12.0
+  watchdog_ms: 300
+
+app:
+  control_hz: 60.0
+  preview_fps: 30.0
+  lookahead_ms: 0        # >0 = 故意延时，给策略留"未来帧"
+  record_dir: records

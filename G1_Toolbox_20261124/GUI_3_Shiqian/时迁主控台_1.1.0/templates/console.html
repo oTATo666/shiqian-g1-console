@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>时迁主控台 1.1.0</title>
+    <!-- 样式已本地编译（原来是 https://cdn.tailwindcss.com，断网或墙了就整页裸奔） -->
+    <link rel="stylesheet" href="/static/tailwind.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" type="image/png" href="/static/shiqian.png">
+    <!-- 传感器页专用样式：tailwind.css 是按原页面裁剪过的，新类名不会生效，
+         所以这一页用独立 CSS，不依赖 Tailwind 是否编译过对应类。 -->
+    <style>
+        .g1-grid { display: grid; gap: 20px; grid-template-columns: 1fr; }
+        @media (min-width: 1100px) {
+            .g1-grid-2 { grid-template-columns: 1.55fr 1fr; }
+            .g1-grid-3 { grid-template-columns: 1fr 1.9fr; }
+        }
+        .g1-card { background: #fff; border: 1px solid rgba(226,232,240,.9); border-radius: 18px; padding: 22px; }
+        .g1-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+        .g1-card-title { font-size: 15px; font-weight: 600; color: #0f172a; }
+        .g1-sub { font-size: 12px; color: #94a3b8; margin-top: 3px; }
+        .g1-pill { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; font-weight: 500;
+                   padding: 4px 10px; border-radius: 999px; background: #f1f5f9; color: #475569; }
+        .g1-dot { width: 7px; height: 7px; border-radius: 999px; background: #cbd5e1; }
+        .g1-dot.on { background: #10b981; }
+        .g1-dot.warn { background: #f59e0b; }
+        .g1-dot.off { background: #ef4444; }
+        .g1-video-wrap { position: relative; background: #0b1020; border-radius: 14px; overflow: hidden;
+                         aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; }
+        .g1-video-wrap img { width: 100%; height: 100%; object-fit: contain; display: none; }
+        .g1-video-empty { color: #94a3b8; font-size: 13px; text-align: center; padding: 0 24px; line-height: 1.7; }
+        .g1-kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; }
+        .g1-kv span:nth-child(odd) { color: #94a3b8; }
+        .g1-kv span:nth-child(even) { color: #1e293b; font-variant-numeric: tabular-nums; }
+        .g1-meter { height: 10px; border-radius: 999px; background: #eef2f7; overflow: hidden; }
+        .g1-meter > i { display: block; height: 100%; width: 0%; border-radius: 999px;
+                        background: linear-gradient(90deg, #34d399, #10b981 60%, #f59e0b);
+                        transition: width .12s linear; }
+        .g1-wave { width: 100%; height: 78px; display: block; background: #f8fafc; border-radius: 12px; }
+        .g1-btn { font-size: 13px; font-weight: 500; padding: 8px 14px; border-radius: 10px; border: 0; cursor: pointer; }
+        .g1-btn.primary { background: #4f46e5; color: #fff; }
+        .g1-btn.primary:hover { background: #4338ca; }
+        .g1-btn.ghost { background: #f1f5f9; color: #334155; }
+        .g1-btn.ghost:hover { background: #e2e8f0; }
+        .g1-btn:disabled { opacity: .5; cursor: not-allowed; }
+        .g1-att { width: 108px; height: 108px; border-radius: 50%; border: 2px solid #e2e8f0;
+                   position: relative; overflow: hidden; background: #f8fafc; flex: 0 0 auto; }
+        .g1-att-horizon { position: absolute; inset: -40%; background: linear-gradient(#dbeafe 0 50%, #fef3c7 50% 100%);
+                          transform-origin: 50% 50%; }
+        .g1-att-line { position: absolute; left: 12%; right: 12%; top: 50%; height: 2px; background: #0f172a; opacity: .55; }
+        .g1-att-cross { position: absolute; left: 50%; top: 50%; width: 34px; height: 2px; background: #ef4444;
+                        transform: translate(-50%, -50%); }
+        .g1-table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+        .g1-table th { text-align: right; font-weight: 600; color: #94a3b8; padding: 6px 8px; border-bottom: 1px solid #eef2f7; }
+        .g1-table th:first-child, .g1-table td:first-child { text-align: left; color: #94a3b8; }
+        .g1-table td { text-align: right; padding: 5px 8px; border-bottom: 1px solid #f6f8fb; color: #334155; }
+        .g1-scroll { max-height: 320px; overflow-y: auto; }
+        .g1-chip { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px;
+                   background: #f8fafc; border: 1px solid #eef2f7; font-size: 12.5px; color: #334155; }
+        .g1-chip small { display: block; color: #94a3b8; font-size: 11px; margin-top: 2px; }
+        .g1-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+        .g1-badge { font-size: 11px; color: #64748b; background: #f1f5f9; border-radius: 6px; padding: 2px 6px; }
+        .g1-seglist { display: flex; flex-direction: column; gap: 8px; max-height: 268px; overflow-y: auto; }
+        .g1-seg { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #eef2f7;
+                  border-radius: 10px; background: #f8fafc; font-size: 12.5px; color: #334155; }
+        .g1-seg .t { color: #94a3b8; font-variant-numeric: tabular-nums; }
+        .g1-seg .d { font-weight: 600; }
+        .g1-seg button { border: 0; background: #e0e7ff; color: #4338ca; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+        .g1-seg button:hover { background: #c7d2fe; }
+        .g1-seg a { color: #64748b; font-size: 12px; text-decoration: none; }
+        .g1-seg a:hover { color: #334155; }
+        .g1-seg audio { height: 26px; }
+        /* ---- 动作模组 ---- */
+        .g1-btn.danger { background: #dc2626; color: #fff; }
+        .g1-btn.danger:hover { background: #b91c1c; }
+        .g1-select { width: 100%; font-size: 12.5px; padding: 5px 8px; border: 1px solid #e2e8f0;
+                     border-radius: 8px; background: #f8fafc; color: #334155; }
+        .motion-drop { border: 1.5px dashed #cbd5e1; border-radius: 14px; padding: 26px 16px;
+                       text-align: center; background: #f8fafc; transition: .15s; }
+        .motion-drop.over { border-color: #4f46e5; background: #eef2ff; }
+        .motion-list { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; }
+        .motion-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px;
+                      border: 1px solid #eef2f7; background: #f8fafc; font-size: 12.5px; color: #334155; cursor: pointer; }
+        .motion-row:hover { background: #f1f5f9; }
+        .motion-row.active { border-color: #818cf8; background: #eef2ff; }
+        .motion-row .nm { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .motion-row .meta { color: #94a3b8; font-variant-numeric: tabular-nums; }
+        .motion-row .act { display: flex; gap: 6px; }
+        .motion-row .act button { border: 0; border-radius: 8px; padding: 4px 10px; cursor: pointer;
+                                  background: #e0e7ff; color: #4338ca; font-size: 12px; }
+        .motion-row .act button.del { background: #fee2e2; color: #b91c1c; }
+        /* ---- 接待工作台 ---- */
+        .rc-input { width:100%; font-size:13px; padding:9px 11px; border:1px solid #e2e8f0;
+                    border-radius:10px; background:#f8fafc; color:#334155; outline:none; }
+        .rc-input:focus { border-color:#818cf8; background:#fff; }
+        textarea.rc-input { resize:vertical; line-height:1.6; }
+        /* 自动接待开关 */
+        .rc-auto { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600;
+                   color:#475569; padding:5px 12px 5px 6px; border-radius:999px; background:#f1f5f9;
+                   cursor:pointer; user-select:none; border:1px solid transparent; }
+        .rc-auto:hover { background:#e2e8f0; }
+        .rc-auto input { appearance:none; -webkit-appearance:none; width:34px; height:19px; border-radius:999px;
+                         background:#cbd5e1; position:relative; outline:none; cursor:pointer; transition:background .15s; }
+        .rc-auto input::after { content:''; position:absolute; top:2px; left:2px; width:15px; height:15px;
+                                border-radius:50%; background:#fff; transition:left .15s; }
+        .rc-auto input:checked { background:#4f46e5; }
+        .rc-auto input:checked::after { left:17px; }
+        .rc-auto:has(input:checked) { background:#eef2ff; color:#4338ca; border-color:#c7d2fe; }
+        /* 呈现 + 小票：左边宽、右边 290px 小票刚好放得下 */
+        .rc-3-2 { display:grid; grid-template-columns: minmax(0,1fr) 340px; gap:16px; align-items:start; }
+        @media (max-width:1180px) { .rc-3-2 { grid-template-columns: 1fr; } }
+        .rc-actions { display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; }
+        @media (max-width:760px) { .rc-actions { grid-template-columns: 1fr; } }
+        .rc-act { text-align:left; border:1px solid #e2e8f0; background:#f8fafc; border-radius:14px;
+                  padding:12px; cursor:pointer; display:flex; flex-direction:column; gap:5px; }
+        .rc-act:hover { border-color:#a5b4fc; background:#eef2ff; }
+        .rc-act .n { width:20px; height:20px; border-radius:50%; background:#4f46e5; color:#fff;
+                     font-size:11px; display:flex; align-items:center; justify-content:center; }
+        .rc-act b { font-size:13px; color:#0f172a; }
+        .rc-act small { color:#94a3b8; font-size:11px; line-height:1.5; }
+        .rc-today { display:flex; flex-direction:column; gap:6px; max-height:190px; overflow-y:auto; }
+        .rc-today .row { display:flex; justify-content:space-between; gap:10px; font-size:12px;
+                         color:#475569; padding:6px 9px; background:#f8fafc; border-radius:8px; }
+        .rc-today .row b { font-weight:600; color:#0f172a; }
+        /* 右列：首次见面 + 小票 纵向堆叠 */
+        .rc-side-stack { display:flex; flex-direction:column; gap:16px; min-width:0; }
+        /* 今日作品横条：不占左右两列高度 */
+        .rc-today-strip { flex-direction:row; flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden;
+                          max-height:none; padding-bottom:4px; }
+        .rc-today-strip .row { flex:0 0 auto; min-width:230px; cursor:pointer; }
+        .rc-today-strip .row:hover { background:#eef2ff; }
+        /* 概览：5 个模块卡一排，避免第 5 个掉到下一行 */
+        .mod-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); }
+        .rcpt { background:#fff; border:1px dashed #cbd5e1; border-radius:10px; padding:18px 16px;
+                width:290px; margin:0 auto; text-align:center; box-shadow:0 2px 10px rgba(15,23,42,.05); }
+        .rcpt-logo { font-size:13px; font-weight:700; letter-spacing:.5px; color:#0f172a; }
+        .rcpt-sub { font-size:10.5px; color:#94a3b8; margin-top:2px; letter-spacing:1px; }
+        .rcpt-hr { border-top:1px dashed #e2e8f0; margin:10px 0; }
+        .rcpt-row { display:flex; justify-content:space-between; font-size:11px; color:#64748b; margin:3px 0; }
+        .rcpt-row b { color:#334155; font-weight:600; font-variant-numeric:tabular-nums; }
+        .rcpt-memory { font-size:13.5px; font-weight:700; color:#0f172a; line-height:1.55; padding:6px 0; }
+        .rcpt-pattern { font-size:30px; color:#4f46e5; line-height:1.25; }
+        .rcpt-label { font-size:10px; color:#94a3b8; letter-spacing:1px; }
+        .rcpt-code { font-size:22px; font-weight:800; letter-spacing:4px; color:#0f172a;
+                     font-variant-numeric:tabular-nums; margin:2px 0 6px; }
+        .rcpt-foot { font-size:10.5px; color:#94a3b8; line-height:1.6; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+
+    <div class="flex h-screen overflow-hidden">
+        <!-- 左侧极简导航栏 -->
+        <aside class="w-60 bg-white border-r border-slate-200/80 flex flex-col justify-between shrink-0">
+            <div>
+                <div class="h-16 flex items-center px-6 border-b border-slate-100">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-full overflow-hidden shrink-0 ring-2 ring-indigo-100 shadow-md shadow-indigo-200/60 bg-indigo-50">
+                            <img src="/static/shiqian.png" alt="时迁" class="w-full h-full object-cover">
+                        </div>
+                        <div class="leading-tight">
+                            <div class="font-semibold text-slate-900 tracking-tight">时迁主控台</div>
+                            <div class="text-[11px] text-slate-400 tracking-wide">v1.1.0 · 校园数字共创</div>
+                        </div>
+                    </div>
+                </div>
+
+                <nav class="p-4 space-y-1">
+                    <button onclick="switchTab('overview')" id="nav-overview" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors bg-indigo-50 text-indigo-600">
+                        <span>系统概览</span>
+                    </button>
+                    <button onclick="switchTab('processes')" id="nav-processes" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100/60 transition-colors">
+                        <span>进程与日志</span>
+                    </button>
+                    <button onclick="switchTab('control')" id="nav-control" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100/60 transition-colors">
+                        <span>接待工作台</span>
+                    </button>
+                    <button onclick="switchTab('sensors')" id="nav-sensors" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100/60 transition-colors">
+                        <span>机器人传感</span>
+                    </button>
+                    <button onclick="switchTab('motion')" id="nav-motion" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100/60 transition-colors">
+                        <span>动作与剪影</span>
+                    </button>
+                    <button onclick="switchTab('redeem')" id="nav-redeem" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100/60 transition-colors">
+                        <span>核销中心</span>
+                    </button>
+                    <button onclick="switchTab('demo')" id="nav-demo" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100/60 transition-colors">
+                        <span>离线演示</span>
+                    </button>
+                    <button onclick="switchTab('settings')" id="nav-settings" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100/60 transition-colors">
+                        <span>系统设置</span>
+                    </button>
+                </nav>
+            </div>
+
+            <div class="p-4 border-t border-slate-100">
+                <div class="bg-slate-50 rounded-xl p-3 flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <span id="global-status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300 animate-pulse"></span>
+                        <span id="global-status-text" class="text-xs font-medium text-slate-600">系统检查中...</span>
+                    </div>
+                    <button onclick="checkHealth()" class="text-xs text-slate-400 hover:text-slate-600">刷新</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 右侧主内容区 -->
+        <main class="flex-1 overflow-y-auto p-8 relative">
+            <div class="max-w-5xl mx-auto">
+                <!-- 视图 1：概览 -->
+                <section id="tab-overview" class="space-y-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h1 class="text-2xl font-bold tracking-tight text-slate-900">系统概览</h1>
+                            <p class="text-sm text-slate-500 mt-1">实时监控系统核心模块运行状态与今日核销数据</p>
+                        </div>
+                        <button onclick="toggleSystem()" id="btn-quick-start" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm shadow-sm shadow-indigo-200 transition-all">一键启动系统</button>
+                    </div>
+
+                    <div id="health-banner" class="hidden bg-amber-50 border border-amber-200/80 rounded-2xl p-4 flex items-center justify-between text-amber-800">
+                        <span id="health-msg" class="text-sm font-medium">检测到部分依赖包未安装，请点击右侧按钮一键初始化环境。</span>
+                        <button onclick="installEnv()" class="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium transition-colors">一键安装依赖</button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                        <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm">
+                            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">系统运行态</span>
+                            <div class="flex items-center space-x-3 mt-3">
+                                <span id="card-sys-dot" class="w-3 h-3 rounded-full bg-slate-300"></span>
+                                <span id="card-sys-text" class="text-lg font-semibold text-slate-800">未启动</span>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm">
+                            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">G1 机器人连接态</span>
+                            <div class="flex items-center space-x-3 mt-3">
+                                <span id="card-g1-dot" class="w-3 h-3 rounded-full bg-slate-300"></span>
+                                <span id="card-g1-text" class="text-lg font-semibold text-slate-800">离线 / 未连通</span>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm">
+                            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">今日累计核销数</span>
+                            <div class="mt-2">
+                                <span id="card-redeem-count" class="text-3xl font-bold tracking-tight text-indigo-600">0</span>
+                                <span class="text-xs text-slate-400 ml-1">人次</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm">
+                        <h3 class="text-base font-semibold text-slate-900 mb-4">核心模块状态矩阵</h3>
+                        <div class="mod-grid">
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                                <span class="text-xs text-slate-500 font-medium">语音交互 (ASR/TTS)</span>
+                                <div class="flex items-center space-x-2 mt-3">
+                                    <span id="mod-asr-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                                    <span id="mod-asr-txt" class="text-sm font-medium text-slate-700">未运行</span>
+                                </div>
+                            </div>
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                                <span class="text-xs text-slate-500 font-medium">大模型推理引擎</span>
+                                <div class="flex items-center space-x-2 mt-3">
+                                    <span id="mod-llm-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                                    <span id="mod-llm-txt" class="text-sm font-medium text-slate-700">未检测</span>
+                                </div>
+                            </div>
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                                <span class="text-xs text-slate-500 font-medium">核销后端服务</span>
+                                <div class="flex items-center space-x-2 mt-3">
+                                    <span id="mod-redeem-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                                    <span id="mod-redeem-txt" class="text-sm font-medium text-slate-700">未运行</span>
+                                </div>
+                            </div>
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                                <span class="text-xs text-slate-500 font-medium">传感器桥 (DDS)</span>
+                                <div class="flex items-center space-x-2 mt-3">
+                                    <span id="mod-sensor-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                                    <span id="mod-sensor-txt" class="text-sm font-medium text-slate-700">未运行</span>
+                                </div>
+                            </div>
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                                <span class="text-xs text-slate-500 font-medium">视觉识别 (OpenCV)</span>
+                                <div class="flex items-center space-x-2 mt-3">
+                                    <span id="mod-vision-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                                    <span id="mod-vision-txt" class="text-sm font-medium text-slate-700">未运行</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 视图 2：进程与日志 -->
+                <section id="tab-processes" class="hidden space-y-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h1 class="text-2xl font-bold tracking-tight text-slate-900">进程与日志</h1>
+                            <p class="text-sm text-slate-500 mt-1">管理后台子进程生命周期并查看实时控制台日志</p>
+                        </div>
+                        <div class="flex space-x-3">
+                            <button onclick="startSystem()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium">启动全部</button>
+                            <button onclick="restartSystem()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium">重启全部</button>
+                            <button onclick="stopSystem()" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-sm font-medium">停止全部</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
+                        <h3 class="text-base font-semibold text-slate-900">模块管理列表</h3>
+                        <div class="divide-y divide-slate-100">
+                            <div class="py-3 flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <span id="proc-asr-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                                    <div>
+                                        <p class="text-sm font-medium text-slate-800">语音交互模块 (main.py)</p>
+                                        <p id="proc-asr-pid" class="text-xs text-slate-400">PID: 未运行</p>
+                                    </div>
+                                </div>
+                                <button onclick="restartModule('asr')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">重启模块</button>
+                            </div>
+                            <div class="py-3 flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <span id="proc-redeem-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                                    <div>
+                                        <p class="text-sm font-medium text-slate-800">核销后台服务 (web_redeem_server.py)</p>
+                                        <p id="proc-redeem-pid" class="text-xs text-slate-400">PID: 未运行</p>
+                                    </div>
+                                </div>
+                                <button onclick="restartModule('redeem')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">重启模块</button>
+                            </div>
+                            <div class="py-3 flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <span id="proc-mock-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                                    <div>
+                                        <p class="text-sm font-medium text-slate-800">离线替身机器人 (mock_robot_server.py)</p>
+                                        <p id="proc-mock-pid" class="text-xs text-slate-400">PID: 未运行</p>
+                                    </div>
+                                </div>
+                                <button onclick="restartModule('mock')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">重启模块</button>
+                            </div>
+                            <div class="py-3 flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <span id="proc-sensor-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                                    <div>
+                                        <p class="text-sm font-medium text-slate-800">传感器桥 (sensor_bridge.py · conda g1)</p>
+                                        <p id="proc-sensor-pid" class="text-xs text-slate-400">PID: 未运行</p>
+                                    </div>
+                                </div>
+                                <button onclick="restartModule('sensor')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">重启模块</button>
+                            </div>
+                            <div class="py-3 flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <span id="proc-vision-dot" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                                    <div>
+                                        <p class="text-sm font-medium text-slate-800">视觉桥 (vision_bridge.py · conda g1)</p>
+                                        <p id="proc-vision-pid" class="text-xs text-slate-400">PID: 未运行</p>
+                                    </div>
+                                </div>
+                                <button onclick="restartModule('vision')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">重启模块</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-900 rounded-2xl p-6 shadow-sm space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">实时运行日志</span>
+                            <button onclick="fetchLogs()" class="text-xs text-slate-400 hover:text-white">刷新日志</button>
+                        </div>
+                        <div id="log-container" class="h-64 overflow-y-auto font-mono text-xs text-slate-300 space-y-1.5 select-text"></div>
+                    </div>
+                </section>
+
+                <!-- 视图 3：接待工作台（听 → 生成 → 呈现/出票） -->
+                <section id="tab-control" class="hidden space-y-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h1 class="text-2xl font-bold tracking-tight text-slate-900">接待工作台</h1>
+                            <p class="text-sm text-slate-500 mt-1">观众说一句话 → 变成一件作品 → 带走一张小票</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <label class="rc-auto" title="开启后：自动收音→识别→生成→播报→摆姿势，全程不用点">
+                                <input type="checkbox" id="rc-auto-toggle" onchange="rcToggleAuto(this.checked)">
+                                <span>自动接待</span>
+                            </label>
+                            <span id="llm-pill" class="g1-pill"><i class="g1-dot"></i><span>模型检测中</span></span>
+                            <button onclick="startLlm()" class="g1-btn ghost">启动模型</button>
+                            <button onclick="stopLlm()" class="g1-btn ghost">关闭模型</button>
+                            <button onclick="refreshLlm()" class="g1-btn ghost">重连</button>
+                        </div>
+                    </div>
+
+                    <div id="rc-auto-banner" class="hidden" style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:14px;padding:10px 14px;font-size:13px;color:#3730a3;">
+                        <b>自动接待进行中</b> · <span id="rc-auto-note">等待观众说话…</span>
+                        <span id="rc-auto-count" class="g1-badge" style="margin-left:8px;background:#e0e7ff;color:#4338ca">0 件</span>
+                    </div>
+
+                    <div class="g1-grid g1-grid-2">
+                        <!-- ① 听 -->
+                        <div class="g1-card">
+                            <div class="g1-card-head">
+                                <div>
+                                    <div class="g1-card-title">① 听 · 观众说一句话</div>
+                                    <div class="g1-sub">麦克风在机器人头上，说话即可；也可手动输入</div>
+                                </div>
+                                <span id="rc-mic-pill" class="g1-pill"><i class="g1-dot"></i><span>未监听</span></span>
+                            </div>
+
+                            <div class="g1-meter"><i id="rc-mic-bar"></i></div>
+                            <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;margin-top:6px">
+                                <span>麦克风电平</span><span id="rc-mic-db">-∞ dB</span>
+                            </div>
+
+                            <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+                                <button class="g1-btn primary" onclick="micStart()">开始监听</button>
+                                <button class="g1-btn ghost" onclick="micStop()">停止</button>
+                            </div>
+
+                            <div style="margin-top:16px">
+                                <label class="g1-sub" style="display:block;margin-bottom:6px">这句话是</label>
+                                <textarea id="rc-text" rows="3" placeholder="开启「自动接待」后这里会自动出现识别结果；也可以手动输入"
+                                          class="rc-input"></textarea>
+                            </div>
+
+                            <button class="g1-btn primary" style="width:100%;margin-top:16px" onclick="rcGenerate()">
+                                生成作品 →
+                            </button>
+                        </div>
+
+                        <!-- ② 生成 -->
+                        <div class="g1-card">
+                            <div class="g1-card-head">
+                                <div>
+                                    <div class="g1-card-title">② 生成 · 记忆点与图案</div>
+                                    <div class="g1-sub" id="rc-gen-sub">本机 qwen3:8b 负责提炼与选图案</div>
+                                </div>
+                                <span id="rc-gen-pill" class="g1-pill"><i class="g1-dot"></i><span>待生成</span></span>
+                            </div>
+
+                            <label class="g1-sub" style="display:block;margin-bottom:6px">记忆点（会印在小票上，可改）</label>
+                            <input id="rc-memory" class="rc-input" placeholder="等待生成…" maxlength="24">
+
+                            <div class="g1-kv" style="margin-top:14px">
+                                <span>专属图案</span>
+                                <span>
+                                    <select id="rc-pattern" class="g1-select">
+                                        <option value="star">✦ 星形</option>
+                                        <option value="heart">♥ 心形</option>
+                                        <option value="wave">〜 波浪</option>
+                                        <option value="emblem">◈ 校徽</option>
+                                        <option value="spark">✧ 光芒</option>
+                                        <option value="circle">◯ 圆环</option>
+                                    </select>
+                                </span>
+                                <span>机器人姿势</span>
+                                <span><select id="rc-pose" class="g1-select"></select></span>
+                            </div>
+
+                            <div style="margin-top:12px">
+                                <label class="g1-sub" style="display:block;margin-bottom:6px">机器人会这么说</label>
+                                <input id="rc-reply" class="rc-input" placeholder="等待生成…" maxlength="40">
+                            </div>
+
+                            <button class="g1-btn ghost" style="width:100%;margin-top:14px" onclick="rcRegenerate()">
+                                换一个（重新生成）
+                            </button>
+                            <div class="g1-sub" style="margin-top:10px" id="rc-gen-info">—</div>
+                        </div>
+                    </div>
+
+                    <!-- ③ 呈现 + 小票 -->
+                    <div class="g1-grid rc-3-2" style="align-items:start">
+                        <div class="g1-card">
+                            <div class="g1-card-head">
+                                <div>
+                                    <div class="g1-card-title">③ 呈现 · 让作品发生</div>
+                                    <div class="g1-sub">三个动作可以按顺序做，也可以单独做</div>
+                                </div>
+                            </div>
+                            <div class="rc-actions">
+                                <button class="rc-act" onclick="rcSpeak()">
+                                    <span class="n">1</span><b>机器人说话</b><small>用机器人喇叭播报这句记忆点</small>
+                                </button>
+                                <button class="rc-act" onclick="rcPose()">
+                                    <span class="n">2</span><b>摆出姿势</b><small>arm_sdk 上半身动作，平衡保持运行</small>
+                                </button>
+                                <button class="rc-act" onclick="rcCapture()">
+                                    <span class="n">3</span><b>剪影定格</b><small>幕布前保持不动，截图存档</small>
+                                </button>
+                            </div>
+                            <div class="g1-sub" style="margin-top:12px;line-height:1.7">
+                                剪影定格要幕布 + 强光；点一下就把当前机载画面存成 jpg，随小票一起存档。
+                            </div>
+
+                            <div class="g1-card-head" style="margin-top:22px">
+                                <div>
+                                    <div class="g1-card-title">今日作品</div>
+                                    <div class="g1-sub">今天已经出过的票 · 点一行带着礼品码去核销</div>
+                                </div>
+                                <span class="g1-badge" id="rc-today-count">0 张</span>
+                            </div>
+                            <div id="rc-today-list" class="rc-today">
+                                <div class="g1-sub">还没有出票</div>
+                            </div>
+                        </div>
+                        <div class="rc-side-stack">
+                        <div class="g1-card">
+                            <div class="g1-card-head">
+                                <div>
+                                    <div class="g1-card-title">首次见面</div>
+                                    <div class="g1-sub">机载相机 + Livox MID360</div>
+                                </div>
+                                <span id="rc-vis-pill" class="g1-pill"><i class="g1-dot"></i><span>未启动</span></span>
+                            </div>
+                            <div class="g1-video-wrap" style="aspect-ratio:4/3">
+                                <img id="rc-vis-img" alt="视觉">
+                                <div class="g1-video-empty" id="rc-vis-empty">视觉桥未启动</div>
+                            </div>
+                            <div class="g1-kv" style="margin-top:12px">
+                                <span>在场</span><span id="rc-vis-present">—</span>
+                                <span>人脸 / 人形</span><span id="rc-vis-count">—</span>
+                                <span>激光雷达</span><span id="rc-vis-lidar">—</span>
+                            </div>
+                            <label class="rc-auto" style="margin-top:12px">
+                                <input type="checkbox" id="rc-vis-auto" onchange="rcVisionCfg()">
+                                <span>有人靠近自动接待</span>
+                            </label>
+                        </div>
+                        <div class="g1-card rc-receipt-card">
+                            <div class="g1-card-head">
+                                <div>
+                                    <div class="g1-card-title">创作凭证</div>
+                                    <div class="g1-sub">58mm 热敏小票预览</div>
+                                </div>
+                                <button class="g1-btn primary" onclick="rcPrint()">打印小票</button>
+                            </div>
+                            <div id="receipt" class="rcpt">
+                                <div class="rcpt-logo">G1 校园数字共创</div>
+                                <div class="rcpt-sub">· 专属创作凭证 ·</div>
+                                <div class="rcpt-hr"></div>
+                                <div class="rcpt-row"><span>作品编号</span><b id="rcpt-id">—</b></div>
+                                <div class="rcpt-row"><span>完成时间</span><b id="rcpt-time">—</b></div>
+                                <div class="rcpt-hr"></div>
+                                <div class="rcpt-memory" id="rcpt-memory">说一句话，这里会出现你的记忆点</div>
+                                <div class="rcpt-pattern" id="rcpt-pattern">✦</div>
+                                <div class="rcpt-hr"></div>
+                                <div class="rcpt-label">随机礼品数字码</div>
+                                <div class="rcpt-code" id="rcpt-code">------</div>
+                                <div class="rcpt-foot">凭此码到兑奖台兑换<br>3D 打印纪念品一枚</div>
+                            </div>
+                            <div class="g1-sub" style="margin-top:12px;line-height:1.7" id="rc-print-hint">
+                                打印按钮会调起系统打印对话框；选 58mm 热敏机即可。
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 视图 3.5：机器人传感 -->
+                <section id="tab-sensors" class="hidden space-y-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h1 class="text-2xl font-bold tracking-tight text-slate-900">机器人传感</h1>
+                            <p class="text-sm text-slate-500 mt-1">G1 实机传感器直连：麦克风、机载画面、IMU 与 29 路关节</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span id="g1-link-pill" class="g1-pill"><i class="g1-dot"></i><span>链路检查中</span></span>
+                            <button onclick="startSensorBridge()" class="g1-btn ghost">启动传感器桥</button>
+                        </div>
+                    </div>
+
+                    <div class="g1-grid g1-grid-2">
+                        <!-- 视频 -->
+                        <div class="g1-card">
+                            <div class="g1-card-head">
+                                <div>
+                                    <div class="g1-card-title">机载画面</div>
+                                    <div class="g1-sub" id="g1-video-sub">rt/frontvideostream · 头部 D435i</div>
+                                </div>
+                                <span id="g1-video-pill" class="g1-pill"><i class="g1-dot"></i><span>等待数据</span></span>
+                            </div>
+                            <div class="g1-video-wrap">
+                                <img id="g1-video-img" alt="G1 机载画面">
+                                <div class="g1-video-empty" id="g1-video-empty">
+                                    还没有画面。<br>
+                                    <span id="g1-video-note">正在订阅机载视频话题…</span>
+                                </div>
+                            </div>
+                            <div class="g1-kv" style="margin-top:14px">
+                                <span>视频源</span><span id="g1-video-source">—</span>
+                                <span>帧率</span><span id="g1-video-hz">—</span>
+                                <span>编码</span><span id="g1-video-codec">—</span>
+                            </div>
+                        </div>
+
+                        <!-- 麦克风 -->
+                        <div class="g1-card">
+                            <div class="g1-card-head">
+                                <div>
+                                    <div class="g1-card-title">麦克风阵列</div>
+                                    <div class="g1-sub">4 麦 · 16 kHz 单声道 · UDP 组播</div>
+                                </div>
+                                <span id="g1-mic-pill" class="g1-pill"><i class="g1-dot"></i><span>未采集</span></span>
+                            </div>
+
+                            <div class="g1-meter"><i id="g1-mic-bar"></i></div>
+                            <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;margin-top:6px">
+                                <span>电平</span><span id="g1-mic-db">-∞ dB</span>
+                            </div>
+                            <canvas id="g1-mic-wave" class="g1-wave" width="520" height="78" style="margin-top:10px"></canvas>
+
+                            <div class="g1-kv" style="margin-top:12px">
+                                <span>录音时长</span><span id="g1-mic-secs">0.0 s</span>
+                                <span>数据包</span><span id="g1-mic-packets">0</span>
+                                <span>ASR 状态</span><span id="g1-mic-asr">—</span>
+                            </div>
+
+                            <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+                                <button id="g1-mic-start" onclick="micStart()" class="g1-btn primary">开始自动监听</button>
+                                <button id="g1-mic-stop" onclick="micStop()" class="g1-btn ghost">停止</button>
+                                <button onclick="downloadWav()" class="g1-btn ghost">下载整段</button>
+                                <button onclick="clearSegments()" class="g1-btn ghost">清空片段</button>
+                            </div>
+                            <div class="g1-sub" style="margin-top:10px;line-height:1.6">
+                                开一次就一直听：说话自动切成一句一句（VAD，静音 0.5 秒断句），
+                                不用手动按开始/结束。停止时会把 voice 模式还原成打开前的值。
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="g1-grid g1-grid-2">
+                        <!-- 自动切出来的句子 -->
+                        <div class="g1-card">
+                            <div class="g1-card-head">
+                                <div>
+                                    <div class="g1-card-title">自动切句片段</div>
+                                    <div class="g1-sub">静音 0.5 秒自动断句 · 最多保留 40 条</div>
+                                </div>
+                                <span id="g1-seg-pill" class="g1-pill"><i class="g1-dot"></i><span>0 条</span></span>
+                            </div>
+                            <div id="g1-segments" class="g1-seglist">
+                                <div class="g1-sub">还没有片段。点左侧「开始自动监听」，然后正常说话即可。</div>
+                            </div>
+                            <audio id="g1-audio" style="display:none"></audio>
+                        </div>
+
+                        <!-- 机器人播报 -->
+                        <div class="g1-card">
+                            <div class="g1-card-head">
+                                <div>
+                                    <div class="g1-card-title">机器人播报</div>
+                                    <div class="g1-sub">直接用 G1 头部喇叭念（voice API 1001）</div>
+                                </div>
+                                <span class="g1-badge">TTS</span>
+                            </div>
+                            <textarea id="g1-tts-text" rows="4" placeholder="输入要机器人说的话，例如：你好呀，我是时迁。"
+                                      style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;font-size:13px;color:#334155;background:#f8fafc;resize:vertical;"></textarea>
+                            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+                                <button onclick="robotSay()" class="g1-btn primary">让机器人念</button>
+                                <button onclick="robotSay('你好呀，我是时迁。说一句想被记住的话，我为你定格一个光影姿态。')" class="g1-btn ghost">欢迎语</button>
+                                <button onclick="robotSay('没听清，请再说一遍。')" class="g1-btn ghost">没听清</button>
+                            </div>
+                            <div class="g1-sub" style="margin-top:10px;line-height:1.6">
+                                走的是机器人自己的语音服务，不经过电脑音箱，也不依赖 edge-tts。
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="g1-grid g1-grid-3">
+                        <!-- IMU -->
+                        <div class="g1-card">
+                            <div class="g1-card-head">
+                                <div class="g1-card-title">本体 IMU</div>
+                                <span id="g1-imu-pill" class="g1-pill"><i class="g1-dot"></i><span>—</span></span>
+                            </div>
+                            <div style="display:flex;gap:18px;align-items:center">
+                                <div class="g1-att">
+                                    <div class="g1-att-horizon" id="g1-att-h"></div>
+                                    <div class="g1-att-line"></div>
+                                    <div class="g1-att-cross"></div>
+                                </div>
+                                <div class="g1-kv" style="flex:1">
+                                    <span>Roll</span><span id="g1-rpy-r">—</span>
+                                    <span>Pitch</span><span id="g1-rpy-p">—</span>
+                                    <span>Yaw</span><span id="g1-rpy-y">—</span>
+                                    <span>陀螺</span><span id="g1-gyro">—</span>
+                                    <span>加速度</span><span id="g1-acc">—</span>
+                                    <span>温度</span><span id="g1-imu-temp">—</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 关节 -->
+                        <div class="g1-card">
+                            <div class="g1-card-head">
+                                <div>
+                                    <div class="g1-card-title">关节编码器</div>
+                                    <div class="g1-sub">rt/lowstate · q(rad) / dq(rad/s) / tau_est(N·m) / 温度(°C)</div>
+                                </div>
+                                <span id="g1-joint-pill" class="g1-pill"><i class="g1-dot"></i><span>—</span></span>
+                            </div>
+                            <div class="g1-scroll">
+                                <table class="g1-table">
+                                    <thead>
+                                        <tr><th>#</th><th>q</th><th>dq</th><th>tau_est</th><th>温度</th></tr>
+                                    </thead>
+                                    <tbody id="g1-joint-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="g1-card">
+                        <div class="g1-card-head">
+                            <div>
+                                <div class="g1-card-title">可用传感器清单</div>
+                                <div class="g1-sub">每秒自动探测：亮 = 现在真的有数据</div>
+                            </div>
+                            <span class="g1-badge" id="g1-remote">遥控器 —</span>
+                        </div>
+                        <div class="g1-chips" id="g1-sensor-chips"></div>
+                    </div>
+                </section>
+
+                <!-- 视图 3.6：动作模组 -->
+                <section id="tab-motion" class="hidden space-y-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h1 class="text-2xl font-bold tracking-tight text-slate-900">动作与剪影</h1>
+                            <p class="text-sm text-slate-500 mt-1">导入动作模组 → 回放到机器人 → 看关节曲线；接待页的「摆姿势」也从这里的动作库取</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span id="motion-link-pill" class="g1-pill"><i class="g1-dot"></i><span>桥未启动</span></span>
+                            <button onclick="startMotionBridge()" class="g1-btn ghost">启动动作桥</button>
+                        </div>
+                    </div>
+
+                    <div class="g1-grid g1-grid-2">
+                        <!-- 导入 -->
+                        <div class="g1-card">
+                            <div class="g1-card-head">
+                                <div>
+                                    <div class="g1-card-title">导入动作文件</div>
+                                    <div class="g1-sub">支持 .g1motion / .npy / .csv</div>
+                                </div>
+                            </div>
+                            <div id="motion-drop" class="motion-drop">
+                                <div style="font-size:26px;line-height:1">📂</div>
+                                <div style="margin-top:8px;font-weight:600">把动作文件拖到这里</div>
+                                <div class="g1-sub" style="margin-top:6px">或点下面的按钮选择文件</div>
+                                <input id="motion-file" type="file" accept=".g1motion,.npy,.csv" style="display:none" onchange="motionPickFile(this)">
+                                <button class="g1-btn primary" style="margin-top:14px" onclick="document.getElementById('motion-file').click()">选择文件</button>
+                            </div>
+                            <div class="g1-sub" style="margin-top:12px;line-height:1.7">
+                                文件来自 G1 管道界面的「💾 保存动作模组」。一个文件自带帧率、
+                                关节顺序和元数据，换台电脑也能直接导入。
+                            </div>
+                        </div>
+
+                        <!-- 回放控制 -->
+                        <div class="g1-card">
+                            <div class="g1-card-head">
+                                <div>
+                                    <div class="g1-card-title">回放到机器人</div>
+                                    <div class="g1-sub" id="motion-selected">未选择动作</div>
+                                </div>
+                                <span id="motion-state-pill" class="g1-pill"><i class="g1-dot"></i><span>空闲</span></span>
+                            </div>
+
+                            <div class="g1-kv" style="margin-top:4px">
+                                <span>回放模式</span>
+                                <span>
+                                    <select id="motion-mode" class="g1-select">
+                                        <option value="arm_sdk">上半身 arm_sdk（内部平衡保持，推荐）</option>
+                                        <option value="lowlevel">低层全关节（释放平衡，需吊架）</option>
+                                        <option value="policy">策略跟踪（自稳定 · 实验，仅 36 列 CSV）</option>
+                                    </select>
+                                </span>
+                                <span>回放速度</span>
+                                <span>
+                                    <select id="motion-speed" class="g1-select">
+                                        <option value="0.1">0.1x 极慢</option>
+                                        <option value="0.2" selected>0.2x 首测推荐</option>
+                                        <option value="0.25">0.25x</option>
+                                        <option value="0.5">0.5x</option>
+                                        <option value="1">1x 原速</option>
+                                    </select>
+                                </span>
+                            </div>
+
+                            <div class="g1-meter" style="margin-top:16px"><i id="motion-bar"></i></div>
+                            <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#94a3b8;margin-top:6px">
+                                <span id="motion-progress-text">—</span><span id="motion-progress-pct">0%</span>
+                            </div>
+
+                            <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+                                <button id="motion-play-btn" class="g1-btn primary" onclick="motionPlay()">▶ 回放到机器人</button>
+                                <button class="g1-btn danger" onclick="motionStop()">⛔ 停止</button>
+                            </div>
+                            <div class="g1-sub" style="margin-top:10px;line-height:1.7">
+                                arm_sdk：机器人自己站着保持平衡，只接管腰+双臂，最安全；<br>
+                                lowlevel：接管 29 关节，<b>没有吊架会摔</b>，只在测试台上用。<br>
+                                策略跟踪：跑 RL 策略闭环（50Hz 按状态重算），<b>这是唯一"自己会站稳"的模式</b>；
+                                需要 36 列 60Hz 的 rl_sar CSV，并在 config.yaml 打开 <code>motion.allow_policy</code>。
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 动作库 -->
+                    <div class="g1-card">
+                        <div class="g1-card-head">
+                            <div>
+                                <div class="g1-card-title">动作库</div>
+                                <div class="g1-sub">选中一行可查看关节曲线并回放</div>
+                            </div>
+                            <span class="g1-badge" id="motion-count">0 个</span>
+                        </div>
+                        <div id="motion-list" class="motion-list">
+                            <div class="g1-sub">还没有动作，先导入一个 .g1motion 文件</div>
+                        </div>
+                    </div>
+
+                    <!-- 曲线 -->
+                    <div class="g1-card">
+                        <div class="g1-card-head">
+                            <div>
+                                <div class="g1-card-title">关节曲线预览</div>
+                                <div class="g1-sub" id="motion-curve-sub">左髋 / 左膝 / 右髋 / 右膝 / 腰转</div>
+                            </div>
+                            <span class="g1-badge" id="motion-curve-info">—</span>
+                        </div>
+                        <canvas id="motion-curve" width="900" height="230" style="width:100%;height:auto;display:block;background:#fff"></canvas>
+                    </div>
+                </section>
+
+                <!-- 视图 4：核销中心 -->
+                <section id="tab-redeem" class="hidden space-y-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h1 class="text-2xl font-bold tracking-tight text-slate-900">核销中心</h1>
+                            <p class="text-sm text-slate-500 mt-1">管理校园活动兑换码、实时核销与数据导出</p>
+                        </div>
+                        <button onclick="exportCSV()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium">导出 CSV</button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div class="w-full md:w-2/3 flex space-x-3">
+                            <input type="text" id="redeem-input" placeholder="输入或扫描兑换码 (例如: XQ8888)" class="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                            <button onclick="doRedeem()" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium shrink-0">立即核销</button>
+                        </div>
+                        <div class="w-full md:w-1/3 bg-slate-50 border border-slate-100 rounded-xl p-4 flex items-center justify-between">
+                            <span class="text-xs text-slate-500">今日累计核销</span>
+                            <span id="redeem-today-badge" class="text-2xl font-bold text-indigo-600">0 人次</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm">
+                        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+                            <h3 class="text-base font-semibold text-slate-900">码池明细</h3>
+                            <input type="text" id="redeem-search" oninput="filterCodes()" placeholder="搜索兑换码..." class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none">
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50/70 border-b border-slate-100 text-xs font-semibold text-slate-500">
+                                        <th class="py-3 px-6">兑换码</th>
+                                        <th class="py-3 px-6">状态</th>
+                                        <th class="py-3 px-6">核销时间</th>
+                                        <th class="py-3 px-6 text-right">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="codes-table-body" class="divide-y divide-slate-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 视图 5：离线演示 -->
+                <section id="tab-demo" class="hidden space-y-6">
+                    <div>
+                        <h1 class="text-2xl font-bold tracking-tight text-slate-900">离线演示</h1>
+                        <p class="text-sm text-slate-500 mt-1">一键拉起替身机器人环境，用于脱离实体硬件的沙箱演练</p>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-base font-semibold text-slate-900">离线替身模式 (Mock Server)</h3>
+                                <p class="text-xs text-slate-500 mt-0.5">自动启动本地替身机器人，模拟 G1 机器人的 HTTP 动作应答。</p>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="mock-toggle" onchange="toggleMockMode(this)" class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                        </div>
+
+                        <div class="border-t border-slate-100 pt-6 space-y-2">
+                            <h4 class="text-sm font-semibold text-slate-800">这套替身是给「时迁主程序」用的</h4>
+                            <p class="text-xs text-slate-500 leading-relaxed">
+                                打开开关会拉起 <code>mock_robot_server.py</code>（5002），主程序下发的 A–H 姿势会打印在日志里，
+                                方便没有机器人时把出票、核销、播报整条流程走通。真机上线后关掉即可。
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 视图 6：系统设置 -->
+                <section id="tab-settings" class="hidden space-y-6">
+                    <div>
+                        <h1 class="text-2xl font-bold tracking-tight text-slate-900">系统设置</h1>
+                        <p class="text-sm text-slate-500 mt-1">集中管理网络端口、API 密钥与机器人交互行为参数</p>
+                    </div>
+
+                    <form id="settings-form" onsubmit="saveConfig(event)" class="space-y-6">
+                        <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
+                            <h3 class="text-base font-semibold text-slate-900">分区 A：连接与端口</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">G1 机器人地址</label>
+                                    <input type="text" name="g1_roboturl" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">WebSocket 回执地址</label>
+                                    <input type="text" name="g1_wsurl" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">主控台端口 (Console Port)</label>
+                                    <input type="number" name="server_consoleport" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">核销后台端口 (Redeem Port)</label>
+                                    <input type="number" name="server_redeemport" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
+                            <h3 class="text-base font-semibold text-slate-900">分区 B：密钥与大模型</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">大模型接口地址 (API URL)</label>
+                                    <input type="text" name="llm_apiurl" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">大模型名称 (Model)</label>
+                                    <input type="text" name="llm_model" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">大模型 API 密钥</label>
+                                    <input type="password" name="llm_apikey" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">核销后台管理密码</label>
+                                    <input type="password" name="redeem_adminpassword" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
+                            <h3 class="text-base font-semibold text-slate-900">分区 C：行为与音频参数</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">动作冷却秒数</label>
+                                    <input type="number" name="behavior_actioncooldownsec" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">请求过期秒数</label>
+                                    <input type="number" name="behavior_requestttlsec" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">TTS 播报音量 (0-100)</label>
+                                    <input type="number" name="behavior_tts_volume" min="0" max="100" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" onclick="rollbackConfig()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium">回滚上次配置</button>
+                            <button type="submit" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium shadow-sm shadow-indigo-200">保存全部配置</button>
+                        </div>
+                    </form>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col space-y-2"></div>
+    <script src="/static/app.js"></script>
+</body>
+</html>

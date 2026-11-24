@@ -1,0 +1,91 @@
+======================================================================
+  G1_Toolbox_20261124  ·  版本与清单
+======================================================================
+
+生成时间：2026-11-24 15:35
+总大小  ：约 2.1 GB（解压后）
+文件数  ：35,235
+
+一、三套 GUI（同级）
+----------------------------------------------------------------------
+GUI_1_Pipeline\          管道转换（离线 BVH -> G1）      2.2 MB / 42 文件
+  pipeline\              源码（bvh_parser / retarget / g1_model / replay / gui ...）
+  pipeline\train\        训练作业管理 + short_v1 作业（政策已导出）
+  output\                默认导出目录
+  使用说明.md
+
+GUI_2_MocapLive\         实时转换（SlimeVR -> GMR -> G1） 1.5 MB / 54 文件
+  mocap_live\            源码（vmc / complete / retarget / core / ui / outputs）
+  configs\               default.yaml / g1_real.yaml / ik\slimevr_pos_to_g1.json
+  tools\                 selftest / vmc_probe / fake_vmc_sender / g1_check
+  records\               录制输出目录（空）
+  README.md / 使用说明.md
+  界面截图*.png
+
+GUI_3_Shiqian\           时迁控制台（便携版 + 机器人桥）  204 MB / 1,436 文件
+  runtime\               自带 Python 3.14 + flask 等（109 MB）
+  时迁主控台_1.1.0\      主控台（console_ui.py / templates / static / motions）
+  shiqian_v9\            业务工程（sensor/motion/vision 三个桥 + 模块 + 模型，95 MB）
+  ①双击启动.bat          原版入口
+  打包说明.md
+
+二、共享资源
+----------------------------------------------------------------------
+Shared\G1_DevKit\        92 MB
+  05_retarget\GMR\       GMR 重定向（源码 + ik_configs + unitree_g1 资产）
+  03_models\menagerie\   MuJoCo 官方 G1 模型（scene.xml + meshes）
+
+Shared\unitree_sdk2_python\   1.3 MB（G1 官方 DDS SDK，git 814556d）
+Shared\urdf\                  72 KB（g1_29dof.urdf / g1_29dof_rev_1_0.urdf）
+Shared\samples\               4.0 MB（bvh-recording.bvh 等样例）
+Shared\network_tools\         38 KB（connect_g1.ps1 / 一键连接 / 恢复 DHCP / 改网卡名）
+Shared\scripts\               12 KB（check_env.py / g1_read_state.py）
+
+三、运行环境
+----------------------------------------------------------------------
+Runtime_Python310\python310\  1.8 GB / 33,157 文件
+  Python            3.10.22 (Anaconda build)
+  PySide6           6.12.0
+  pyqtgraph         0.14.0
+  PyOpenGL          3.1.10
+  numpy             2.2.6
+  scipy             1.15.3
+  mujoco            3.17.0
+  mink              1.3.0
+  daqp              0.11.2
+  qpsolvers         4.13.0
+  loop-rate-limiters 1.2.0
+  torch             2.14.1+cpu
+  opencv-python     5.0.0.93
+  cyclonedds        0.10.2
+  unitree_sdk2py    本地源码（已装进 site-packages）
+  onnxruntime       1.23.2
+  vosk              0.3.45
+  python-osc        1.10.3
+  matplotlib        3.10.9
+  其他              见 Env\freeze_g1_env.txt
+
+四、Env\
+----------------------------------------------------------------------
+check_env.py                  环境自检（默认 + --full 实测 GMR）
+pip_install.py                按 requirements 安装（--which / --sdk / --mirror / --proxy）
+requirements_pipeline.txt     管道转换依赖
+requirements_mocap.txt        实时转换依赖
+requirements_bridge.txt       时迁三个桥依赖
+freeze_g1_env.txt             本机 conda g1 的完整 pip freeze
+README_ENV.md                 环境说明 / 重建步骤
+
+五、没有带的东西
+----------------------------------------------------------------------
+D:\isaac\（Isaac Lab + Isaac Sim，约 9.1 GB）        —— 训练页才需要
+G1_DevKit\04_rl\（unitree_rl_lab / Isaac 任务）      —— 训练页才需要
+G1_DevKit\01_docs / 02_sdk / 06_system 的其他仓库     —— 不影响三套 GUI
+models\G1标准版.stp（82 MB CAD）                     —— 不影响运行
+bvh-recording.bvh 以外的用户 BVH 数据                 —— 只带了一个样例
+时迁 data\segments\*.wav / mic_last.wav              —— 测试录音，已清
+conda-meta（约 2 万个小文件）                         —— 只为减小解压负担
+
+六、校验
+----------------------------------------------------------------------
+压缩包 SHA256 见压缩包同级的 SHA256.txt。
+解压后可以跑 0_环境自检.bat 快速确认完整性。

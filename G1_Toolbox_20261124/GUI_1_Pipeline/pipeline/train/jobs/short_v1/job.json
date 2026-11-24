@@ -1,0 +1,9 @@
+{
+  "name": "short_v1",
+  "csv": "D:\\DATAWORK\\G1\\pipeline\\train\\jobs\\short_v1\\motion_60hz.csv",
+  "task_id": "Unitree-G1-29dof-Mimic-JobShortV1",
+  "task_dir": "D:\\DATAWORK\\G1\\G1_DevKit\\04_rl\\unitree_rl_lab\\source\\unitree_rl_lab\\unitree_rl_lab\\tasks\\mimic\\robots\\g1_29dof\\job_short_v1",
+  "num_envs": 1024,
+  "max_iterations": 3000,
+  "created": "2026-11-18 15:26:36"
+}
