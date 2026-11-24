@@ -1,0 +1,67 @@
+avatar:
+  active_pack: shiqian_sakura
+  allow_skip: true
+  boot_duration_ms: 4200
+  boot_enabled: true
+  enabled: true
+  name: 时迁
+  theme: sakura_sage
+behavior:
+  actioncooldownsec: 2
+  callbacktimeoutsec: 5
+  requestttlsec: 60
+  tts_volume: 80
+g1:
+  actionendpoint: /triggeraction/{actionid}
+  actionstatusendpoint: /actionstatus/{requestid}
+  roboturl: http://192.168.123.164
+  wsurl: ws://192.168.1.100:8081
+lidar:
+  ip: 192.168.123.120
+llm:
+  apiurl: http://127.0.0.1:11434
+  model: qwen3:8b
+  provider: ollama
+  proxy_url_env: ''
+  timeout: 90
+motion:
+  allow_policy: false
+  dir: ''
+  enabled: true
+  host: 127.0.0.1
+  ifaceaddr: ''
+  policy_dir: ''
+  policy_root: D://DATAWORK//G1
+  port: 5012
+  robotip: 192.168.123.161
+redeem:
+  logenabled: true
+sensor:
+  enabled: true
+  host: 127.0.0.1
+  ifaceaddr: ''
+  ifacename: 以太网
+  motorcount: 29
+  port: 5011
+  # Full path to the bridge python.exe (leave empty for auto-detect),
+  # e.g. C:\Users\<you>\G1_Bridge_Env\Scripts\python.exe
+  # 需要 Python 3.10 + numpy / cyclonedds / unitree_sdk2py / opencv-python
+  python: ''
+  robotip: 192.168.123.161
+  videourl: http://192.168.123.164:8081/stream
+server:
+  consoleport: 5000
+  mock_port: 5002
+  redeemport: 5001
+skills:
+  endpoint_env: ''
+vision:
+  autostart: false
+  enabled: true
+  greet: true
+  greet_text: 你好呀，第一次见。我是时迁。
+  host: 127.0.0.1
+  port: 5013
+  present_off: 4.0
+  present_on: 2.0
+  stream: http://192.168.123.164:8081/stream

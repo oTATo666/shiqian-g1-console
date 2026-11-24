@@ -1,0 +1,194 @@
+/* 自定义现代浅色滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* 终端等宽字体与微光效果 */
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* ------------------------------------------------------------------
+   状态色兜底
+   这些类由 app.js 在运行时拼出来（运行中 / 启动中 / 启动失败）。
+   Tailwind 的编译只扫描源码里的字面量，动态拼接的类可能扫不到，
+   所以在这里显式写一份，保证任何情况下状态颜色都对。
+   数值即 Tailwind v3 的默认调色板，重复定义不会冲突。
+   ------------------------------------------------------------------ */
+.text-emerald-600 { color: #059669; }
+.text-rose-600    { color: #e11d48; }
+.text-amber-600   { color: #d97706; }
+.text-slate-400   { color: #94a3b8; }
+.text-slate-500   { color: #64748b; }
+.text-slate-700   { color: #334155; }
+
+.bg-emerald-500   { background-color: #10b981; }
+.bg-rose-500      { background-color: #f43f5e; }
+.bg-amber-400     { background-color: #fbbf24; }
+.bg-slate-300     { background-color: #cbd5e1; }
+
+/* 启动失败时在日志行里高亮——日志是纯文本追加，这里只做颜色兜底 */
+.log-fail { color: #fda4af; }
+
+
+/* ==================================================================
+   虚拟形象「樱花 × 鼠尾草水手服」主题与开机遮罩样式
+   ================================================================== */
+body.theme-sakura-sage {
+  background-color: #FFFDFC !important;
+  color: #1A241E;
+}
+body.theme-sakura-sage aside {
+  background-color: #FAF6F4 !important;
+  border-color: #EAE0DC !important;
+}
+body.theme-sakura-sage .bg-indigo-600 {
+  background-color: #3F624D !important;
+}
+body.theme-sakura-sage .hover\:bg-indigo-700:hover {
+  background-color: #2F4C3B !important;
+}
+body.theme-sakura-sage .bg-indigo-50 {
+  background-color: #ECF3EE !important;
+}
+body.theme-sakura-sage .text-indigo-600 {
+  color: #254030 !important;
+}
+body.theme-sakura-sage .g1-btn.primary {
+  background: #3F624D;
+}
+body.theme-sakura-sage .g1-btn.primary:hover {
+  background: #2F4C3B;
+}
+
+/* 开机画面全屏樱花磨砂遮罩 */
+#boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 35%, rgba(255, 248, 246, 0.97), rgba(246, 238, 234, 0.98));
+  backdrop-filter: blur(10px);
+  transition: opacity 0.55s ease, visibility 0.55s ease;
+}
+#boot-splash.boot-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.boot-card {
+  width: min(760px, 90vw);
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(63, 98, 77, 0.16), 0 0 0 2px rgba(217, 155, 38, 0.45);
+  background: #1A241E;
+  position: relative;
+}
+.boot-card video {
+  width: 100%;
+  display: block;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+.boot-skip-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(26, 36, 30, 0.68);
+  color: #FFFDFC;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+}
+.boot-skip-btn:hover {
+  background: rgba(63, 98, 77, 0.9);
+}
+.boot-footer {
+  width: min(760px, 90vw);
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.boot-bar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #E6DFDC;
+  overflow: hidden;
+}
+.boot-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #3F624D, #D99B26, #C24E42);
+  border-radius: 999px;
+  transition: width 0.2s linear;
+}
+
+/* 概览页看板娘舞台 */
+.mascot-stage {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #FFF8F6 0%, #F4F8F5 100%);
+  border: 1px solid #EAE0DC;
+  border-radius: 20px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.mascot-avatar-wrap {
+  width: 112px;
+  height: 112px;
+  border-radius: 22px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 2.5px solid #D99B26;
+  background: #FFFDFC;
+  box-shadow: 0 10px 24px rgba(194, 78, 66, 0.14);
+  animation: mascotFloat 3.8s ease-in-out infinite;
+}
+.mascot-avatar-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.mascot-ring-ready {
+  box-shadow: 0 0 0 4px rgba(63, 98, 77, 0.22), 0 10px 24px rgba(63, 98, 77, 0.18);
+  border-color: #3F624D;
+}
+.mascot-ring-warn {
+  box-shadow: 0 0 0 4px rgba(217, 155, 38, 0.28);
+  border-color: #D99B26;
+}
+.mascot-bubble {
+  display: inline-block;
+  background: #FFFFFF;
+  border: 1.5px solid #E6DFDC;
+  border-radius: 14px;
+  padding: 8px 14px;
+  font-size: 13.5px;
+  color: #1A241E;
+  box-shadow: 0 4px 12px rgba(26, 36, 30, 0.04);
+}
+@keyframes mascotFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+}

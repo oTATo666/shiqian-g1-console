@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>时迁 · 现场核销台</title>
+<style>
+  /* ==========================================================
+     配色：牛皮纸底 + 墨黑字 + 朱红印章色，做出"纸质凭证"的手感
+     ========================================================== */
+  :root{
+    --paper:#f4efe4;
+    --paper-2:#efe8d9;
+    --card:#fffdf8;
+    --ink:#1b1c1e;
+    --ink-2:#5d5b55;
+    --ink-3:#8f8b81;
+    --line:#e2dbcb;
+    --red:#b7281f;
+    --red-soft:#f6e4e1;
+    --green:#1f6b4f;
+    --green-soft:#e3efe9;
+    --amber:#a8721c;
+    --amber-soft:#f8edd8;
+    --shadow:0 10px 30px rgba(60,45,20,.10);
+    --mono:"SF Mono",Consolas,"Cascadia Mono",monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+    color:var(--ink);background:var(--paper);
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(255,255,255,.75), transparent 45%),
+      radial-gradient(circle at 88% 92%, rgba(214,197,164,.35), transparent 50%);
+    min-height:100%;
+  }
+  h1,h2,h3{font-family:"Songti SC","Noto Serif SC",Georgia,serif;font-weight:700;margin:0;letter-spacing:.02em}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input{font-family:inherit}
+  .hide{display:none !important}
+
+  /* ---------------- 登录页 ---------------- */
+  #login{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+  }
+  .login-card{
+    width:100%;max-width:400px;background:var(--card);border:1px solid var(--line);
+    border-radius:18px;box-shadow:var(--shadow);padding:34px 30px 26px;position:relative;overflow:hidden;
+  }
+  .login-card::before{
+    content:"";position:absolute;inset:8px;border:1px dashed var(--line);border-radius:12px;pointer-events:none;
+  }
+  .brand{text-align:center;position:relative;z-index:1}
+  .brand .mark{
+    width:56px;height:56px;margin:0 auto 14px;border-radius:14px;display:grid;place-items:center;
+    background:linear-gradient(160deg,#2b2c2b,#111);color:#f4efe4;font-size:24px;
+    box-shadow:0 8px 18px rgba(0,0,0,.22);
+  }
+  .brand h1{font-size:23px;letter-spacing:.14em}
+  .brand p{margin:8px 0 0;font-size:12.5px;color:var(--ink-3);letter-spacing:.18em}
+  .field{margin-top:20px;position:relative;z-index:1}
+  .field label{display:block;font-size:12px;color:var(--ink-2);margin-bottom:7px;letter-spacing:.06em}
+  .field input{
+    width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:11px;background:#fff;
+    font-size:15px;outline:none;transition:.18s;color:var(--ink)
+  }
+  .field input:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(27,28,30,.07)}
+  .btn-primary{
+    width:100%;margin-top:22px;padding:14px;border-radius:11px;background:var(--ink);color:#fff;
+    font-size:15px;font-weight:600;letter-spacing:.08em;transition:.18s;
+  }
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(0,0,0,.18)}
+  .btn-primary:disabled{opacity:.5;transform:none;box-shadow:none;cursor:not-allowed}
+  .login-tip{margin-top:16px;font-size:11.5px;color:var(--ink-3);line-height:1.7;text-align:center}
+  .err{margin-top:12px;font-size:12.5px;color:var(--red);text-align:center;min-height:16px}
+
+  /* ---------------- 主界面 ---------------- */
+  #app{max-width:1220px;margin:0 auto;padding:22px 22px 60px}
+  header.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+  .top .logo{
+    width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:#1b1c1e;color:#f4efe4;font-size:19px;
+  }
+  .top .ttl{flex:1;min-width:180px}
+  .top .ttl h2{font-size:19px;letter-spacing:.1em}
+  .top .ttl span{font-size:11.5px;color:var(--ink-3);letter-spacing:.16em}
+  .who{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);
+       background:var(--card);border:1px solid var(--line);padding:7px 12px;border-radius:999px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
+  .ghost{border:1px solid var(--line);background:var(--card);padding:8px 14px;border-radius:9px;font-size:12.5px;color:var(--ink-2);transition:.16s}
+  .ghost:hover{border-color:var(--ink-3);color:var(--ink)}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:13px 15px;position:relative;overflow:hidden}
+  .stat b{display:block;font-size:25px;font-family:var(--mono);letter-spacing:-.02em}
+  .stat span{font-size:11.5px;color:var(--ink-3);letter-spacing:.08em}
+  .stat.accent b{color:var(--red)}
+
+  .grid{display:grid;grid-template-columns:1fr 372px;gap:18px;align-items:start}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+  .panel-hd{display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px dashed var(--line)}
+  .panel-hd h3{font-size:14px;letter-spacing:.1em}
+  .panel-hd em{font-style:normal;font-size:11.5px;color:var(--ink-3)}
+  .panel-bd{padding:20px}
+
+  /* 核销码输入框：6 个格子 */
+  .code-boxes{display:flex;gap:9px;justify-content:center;margin:6px 0 4px}
+  .code-boxes .cell{
+    width:52px;height:66px;border:1.5px solid var(--line);border-radius:12px;display:grid;place-items:center;
+    font-family:var(--mono);font-size:27px;font-weight:600;background:#fff;transition:.16s;color:var(--ink)
+  }
+  .code-boxes .cell.on{border-color:var(--ink);box-shadow:0 3px 0 rgba(27,28,30,.10)}
+  .code-boxes .cell.active{border-color:var(--ink);animation:blink 1.2s infinite}
+  @keyframes blink{50%{box-shadow:0 0 0 4px rgba(27,28,30,.06)}}
+
+  .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px;max-width:330px;margin-left:auto;margin-right:auto}
+  .keypad button{
+    padding:15px 0;border-radius:12px;background:#fbf8f0;border:1px solid var(--line);
+    font-family:var(--mono);font-size:19px;font-weight:600;transition:.12s;
+  }
+  .keypad button:hover{background:#f3ede0}
+  .keypad button:active{transform:scale(.97)}
+  .keypad .fn{font-family:inherit;font-size:13px;color:var(--ink-2)}
+  .keypad .go{background:var(--ink);color:#fff;border-color:var(--ink);font-family:inherit;font-size:14px;letter-spacing:.06em}
+  .keypad .go:hover{background:#000}
+
+  /* 凭证结果卡 */
+  .result{margin-top:20px;border-radius:14px;border:1px dashed var(--line);padding:18px;background:#fffdf8;position:relative;overflow:hidden}
+  .result.empty{text-align:center;color:var(--ink-3);font-size:13px;padding:34px 18px;line-height:1.9}
+  .result.ok{border-color:#bcd9c9;background:linear-gradient(180deg,var(--green-soft),#fffdf8 60%)}
+  .result.warn{border-color:#e6d3a8;background:linear-gradient(180deg,var(--amber-soft),#fffdf8 60%)}
+  .result.error{border-color:#e8c2bd;background:linear-gradient(180deg,var(--red-soft),#fffdf8 60%)}
+  .verdict{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;letter-spacing:.02em}
+  .verdict .ic{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:14px;color:#fff;flex:none}
+  .ok .verdict .ic{background:var(--green)}
+  .warn .verdict .ic{background:var(--amber)}
+  .error .verdict .ic{background:var(--red)}
+  .meta{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;font-size:12.5px}
+  .meta div{color:var(--ink-2)}
+  .meta div b{display:block;color:var(--ink);font-weight:600;margin-top:3px;font-size:13.5px}
+  .meta .wide{grid-column:1/-1}
+  .mem{font-family:"Songti SC",Georgia,serif;font-size:17px;line-height:1.6}
+  .actions{display:flex;gap:10px;margin-top:18px}
+  .btn-redeem{
+    flex:1;padding:14px;border-radius:11px;background:var(--red);color:#fff;font-size:15px;font-weight:600;letter-spacing:.08em;
+    transition:.16s;box-shadow:0 8px 18px rgba(183,40,31,.22)
+  }
+  .btn-redeem:hover{transform:translateY(-1px)}
+  .btn-redeem:disabled{background:#d9d4c7;color:#9a958a;box-shadow:none;cursor:not-allowed;transform:none}
+  .btn-line{padding:14px 16px;border-radius:11px;border:1px solid var(--line);font-size:13px;color:var(--ink-2);background:#fff}
+  .btn-line:hover{border-color:var(--ink-3);color:var(--ink)}
+
+  /* 已兑换印章 */
+  .stamp{
+    position:absolute;right:14px;top:16px;transform:rotate(-14deg);
+    border:3px solid var(--red);color:var(--red);border-radius:8px;padding:5px 12px;
+    font-family:"Songti SC",serif;font-size:17px;letter-spacing:.14em;opacity:.92;
+    animation:stampIn .42s cubic-bezier(.2,1.5,.5,1) both;
+  }
+  @keyframes stampIn{0%{transform:rotate(-14deg) scale(2.4);opacity:0}100%{transform:rotate(-14deg) scale(1);opacity:.92}}
+
+  /* 右侧流水 */
+  .flow{padding:6px 8px 10px;max-height:520px;overflow:auto}
+  .flow .item{display:flex;gap:11px;padding:11px 12px;border-radius:11px;transition:.14s}
+  .flow .item:hover{background:#faf6ec}
+  .flow .no{font-family:var(--mono);font-size:11px;color:var(--ink-3);width:76px;flex:none;padding-top:2px}
+  .flow .body{flex:1;min-width:0}
+  .flow .body .r1{font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .flow .body .r1 i{font-style:normal;font-family:var(--mono);font-size:11.5px;color:var(--ink-2);background:#f3ede0;padding:1px 6px;border-radius:5px}
+  .flow .body .r2{font-size:11.5px;color:var(--ink-3);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .flow .empty{text-align:center;color:var(--ink-3);font-size:12.5px;padding:36px 0}
+  .badge{font-size:10.5px;padding:1px 7px;border-radius:999px;background:var(--green-soft);color:var(--green)}
+  .badge.rev{background:var(--amber-soft);color:var(--amber)}
+
+  /* 右侧操作提示卡 */
+  .tips{margin-top:16px}
+  .tips .panel-bd{padding:16px 20px 18px}
+  .tips ul{margin:0;padding:0;list-style:none}
+  .tips li{position:relative;padding-left:15px;font-size:12.5px;color:var(--ink-2);line-height:1.85;margin-bottom:7px}
+  .tips li::before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:50%;background:var(--ink-3)}
+  .tips li b{color:var(--ink)}
+  .tips li:last-child{margin-bottom:0}
+  .badge.rev{background:var(--amber-soft);color:var(--amber)}
+
+  /* 弹窗（二级鉴权） */
+  .mask{position:fixed;inset:0;background:rgba(24,20,12,.42);backdrop-filter:blur(3px);display:grid;place-items:center;padding:20px;z-index:50}
+  .modal{width:100%;max-width:370px;background:var(--card);border-radius:16px;padding:26px 24px;box-shadow:0 24px 60px rgba(0,0,0,.28)}
+  .modal h3{font-size:16px;letter-spacing:.06em}
+  .modal p{font-size:12.5px;color:var(--ink-2);line-height:1.7;margin:10px 0 0}
+  .modal .field{margin-top:16px}
+  .modal .row{display:flex;gap:10px;margin-top:18px}
+  .modal .row button{flex:1;padding:12px;border-radius:10px;font-size:13.5px}
+  .modal .row .cancel{background:#f2ecdf;color:var(--ink-2)}
+  .modal .row .confirm{background:var(--ink);color:#fff;font-weight:600}
+
+  /* 提示条 */
+  #toast{
+    position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);opacity:0;transition:.24s;
+    background:#1b1c1e;color:#fdfaf3;padding:11px 20px;border-radius:999px;font-size:13px;z-index:80;pointer-events:none;
+    box-shadow:0 10px 26px rgba(0,0,0,.26);max-width:86vw;text-align:center
+  }
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+  #toast.bad{background:var(--red)}
+
+  @media (max-width:980px){
+    .grid{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    #app{padding:16px 14px 50px}
+    .code-boxes .cell{width:44px;height:58px;font-size:23px}
+    .flow{max-height:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================ 登录页 ============================ -->
+<div id="login">
+  <div class="login-card">
+    <div class="brand">
+      <div class="mark">迁</div>
+      <h1>时迁 · 现场核销台</h1>
+      <p>G1 校园数字共创 · 礼品兑换</p>
+    </div>
+    <div class="field">
+      <label>你的名字（会记进核销流水）</label>
+      <input id="operator" maxlength="10" placeholder="例如：小林" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label>核销台登录口令</label>
+      <input id="passcode" type="password" placeholder="请输入一级开门口令" autocomplete="current-password" />
+    </div>
+    <button class="btn-primary" id="loginBtn">进入核销台</button>
+    <div class="err" id="loginErr"></div>
+    <div class="login-tip">
+      口令校验由口令根模块完成（源码常量，界面无法修改）<br />
+      连续输错 5 次将短暂锁定
+    </div>
+  </div>
+</div>
+
+<!-- ============================ 主界面 ============================ -->
+<div id="app" class="hide">
+  <header class="top">
+    <div class="logo">迁</div>
+    <div class="ttl">
+      <h2>现场核销台</h2>
+      <span>G1 校园数字共创 · 凭核销码兑换 3D 打印礼品</span>
+    </div>
+    <div class="who"><span class="dot"></span><span id="whoName">—</span></div>
+    <button class="ghost" id="exportBtn">导出流水</button>
+    <button class="ghost" id="logoutBtn">退出</button>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><b id="sRedeemed">0</b><span>已兑换礼品</span></div>
+    <div class="stat"><b id="sIssued">0</b><span>待兑换凭证</span></div>
+    <div class="stat"><b id="sUnused">0</b><span>码池未发放</span></div>
+    <div class="stat accent"><b id="sToday">0</b><span>今日核销</span></div>
+  </div>
+
+  <div class="grid">
+    <!-- 左：核销操作 -->
+    <section class="panel">
+      <div class="panel-hd">
+        <h3>核销操作</h3>
+        <em>输入同学小票上的 6 位核销码</em>
+      </div>
+      <div class="panel-bd">
+        <div class="code-boxes" id="boxes">
+          <div class="cell"></div><div class="cell"></div><div class="cell"></div>
+          <div class="cell"></div><div class="cell"></div><div class="cell"></div>
+        </div>
+
+        <div class="keypad" id="keypad">
+          <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+          <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+          <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+          <button class="fn" data-k="clear">清空</button>
+          <button data-k="0">0</button>
+          <button class="fn" data-k="del">删除</button>
+        </div>
+
+        <div class="result empty" id="result">
+          等待输入核销码…<br />
+          <span style="font-size:12px">输入满 6 位会自动查真伪</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右：最近流水 -->
+    <div>
+      <section class="panel">
+        <div class="panel-hd">
+          <h3>最近核销流水</h3>
+          <em id="recentCount">—</em>
+        </div>
+        <div class="flow" id="flow">
+          <div class="empty">还没有核销记录</div>
+        </div>
+      </section>
+
+      <section class="panel tips">
+        <div class="panel-hd"><h3>现场操作提示</h3><em>给志愿者的三句话</em></div>
+        <div class="panel-bd">
+          <ul>
+            <li><b>绿框</b>：正品凭证，点红色按钮发放礼品即可。</li>
+            <li><b>黄框</b>：已兑换过 / 数据异常，先别发礼品，找负责人复核。</li>
+            <li><b>红框</b>：查无此码，可能输错了，或这张小票是伪造的。</li>
+            <li>撤销核销属于敏感操作，需要负责人输入二级底层总钥匙。</li>
+            <li>所有查询与核销都会自动写入加密审计日志，请放心操作。</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ 二级鉴权弹窗 ============================ -->
+<div class="mask hide" id="adminMask">
+  <div class="modal">
+    <h3 id="adminTitle">二级鉴权 · 底层总钥匙</h3>
+    <p id="adminDesc">该操作会改写底层核销数据，需要输入二级底层总钥匙。校验与操作都会写入加密审计日志。</p>
+    <div class="field">
+      <label>二级底层总钥匙</label>
+      <input id="adminCode" type="password" placeholder="请输入二级底层总钥匙" autocomplete="off" />
+    </div>
+    <div class="row">
+      <button class="cancel" id="adminCancel">取消</button>
+      <button class="confirm" id="adminOk">确认</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ============================================================
+   前端状态机（写得直白一点，方便同学照着改）
+   ============================================================ */
+const state = {
+  csrf: "",          // 每次写操作都要带上的安全令牌
+  operator: "",
+  code: "",          // 当前输入的 6 位码
+  current: null,     // 当前查到的凭证信息
+  busy: false,
+  pendingAdmin: null // 需要二级鉴权时，暂存"鉴权通过后要做什么"
+};
+
+const $ = (id) => document.getElementById(id);
+
+/* ---------- 通用请求封装 ---------- */
+async function api(path, body, method = "POST") {
+  const opt = { method, headers: { "Content-Type": "application/json" } };
+  if (state.csrf) opt.headers["X-CSRF-Token"] = state.csrf;
+  if (body !== undefined) opt.body = JSON.stringify(body);
+  const res = await fetch(path, opt);
+  if (res.status === 401) {           // 会话过期 -> 回到登录页
+    showLogin();
+    throw new Error("登录已过期");
+  }
+  return res.json();
+}
+
+/* ---------- 提示条 ---------- */
+let toastTimer = null;
+function toast(msg, bad = false) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "on" + (bad ? " bad" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.className = ""), 2400);
+}
+
+/* ---------- 登录 / 登出 ---------- */
+function showLogin() {
+  $("app").classList.add("hide");
+  $("login").classList.remove("hide");
+  $("passcode").value = "";
+  state.csrf = "";
+}
+
+$("loginBtn").onclick = async () => {
+  const passcode = $("passcode").value.trim();
+  const operator = $("operator").value.trim();
+  if (!passcode) { $("loginErr").textContent = "请先输入登录口令"; return; }
+  $("loginBtn").disabled = true;
+  $("loginErr").textContent = "";
+  try {
+    const r = await api("/api/login", { passcode, operator });
+    if (!r.ok) { $("loginErr").textContent = r.verdict || "登录失败"; return; }
+    state.csrf = r.csrf;
+    state.operator = r.operator;
+    $("login").classList.add("hide");
+    $("app").classList.remove("hide");
+    $("whoName").textContent = r.operator;
+    await refreshOverview();
+    toast("欢迎回来，" + r.operator);
+  } catch (e) {
+    $("loginErr").textContent = e.message;
+  } finally {
+    $("loginBtn").disabled = false;
+  }
+};
+$("passcode").addEventListener("keydown", (e) => { if (e.key === "Enter") $("loginBtn").click(); });
+
+$("logoutBtn").onclick = async () => {
+  await api("/api/logout", {});
+  showLogin();
+};
+
+$("exportBtn").onclick = () => { window.location.href = "/api/export"; };
+
+/* ---------- 刷新统计与流水 ---------- */
+async function refreshOverview() {
+  const r = await api("/api/session", undefined, "GET");
+  if (!r.logged_in) { showLogin(); return; }
+  state.csrf = r.csrf;
+  renderStats(r.stats);
+  renderRecent(r.recent || []);
+}
+
+function renderStats(s) {
+  if (!s) return;
+  $("sRedeemed").textContent = s.redeemed;
+  $("sIssued").textContent = s.issued;
+  $("sUnused").textContent = s.unused;
+  $("sToday").textContent = s.today_redeemed;
+}
+
+function renderRecent(list) {
+  const box = $("flow");
+  $("recentCount").textContent = list.length ? `最近 ${list.length} 条` : "—";
+  if (!list.length) { box.innerHTML = '<div class="empty">还没有核销记录</div>'; return; }
+  box.innerHTML = list.map((it) => {
+    const isRev = (it.result || "").indexOf("撤销") >= 0;
+    return `<div class="item">
+      <div class="no">${esc((it.operated_at || "").slice(5, 16))}</div>
+      <div class="body">
+        <div class="r1">
+          <i>${esc(it.code)}</i>
+          <span>${esc(it.ticket_no || "—")}</span>
+          <span class="badge ${isRev ? "rev" : ""}">${isRev ? "已撤销" : "已兑换"}</span>
+        </div>
+        <div class="r2">${esc(it.memory || "（无记忆点）")} · ${esc(it.operator || "")}</div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+/* ---------- 输入 6 位码 ---------- */
+function paintBoxes() {
+  const cells = $("boxes").children;
+  for (let i = 0; i < 6; i++) {
+    cells[i].textContent = state.code[i] || "";
+    cells[i].className = "cell" + (state.code[i] ? " on" : "") + (i === state.code.length ? " active" : "");
+  }
+}
+
+$("keypad").addEventListener("click", (e) => {
+  const k = e.target.dataset.k;
+  if (!k) return;
+  if (k === "clear") { state.code = ""; resetResult(); paintBoxes(); return; }
+  if (k === "del") { state.code = state.code.slice(0, -1); resetResult(); paintBoxes(); return; }
+  if (state.code.length >= 6) return;
+  state.code += k;
+  paintBoxes();
+  if (state.code.length === 6) doVerify();
+});
+
+// 电脑上也能直接用键盘敲数字
+document.addEventListener("keydown", (e) => {
+  if ($("app").classList.contains("hide")) return;
+  if (/^[0-9]$/.test(e.key)) {
+    if (state.code.length < 6) { state.code += e.key; paintBoxes(); if (state.code.length === 6) doVerify(); }
+  } else if (e.key === "Backspace") {
+    state.code = state.code.slice(0, -1); resetResult(); paintBoxes();
+  } else if (e.key === "Enter" && state.current && state.current.can_redeem) {
+    doRedeem();
+  }
+});
+
+/* ---------- 查真伪 ---------- */
+function resetResult() {
+  state.current = null;
+  $("result").className = "result empty";
+  $("result").innerHTML = '等待输入核销码…<br /><span style="font-size:12px">输入满 6 位会自动查真伪</span>';
+}
+
+async function doVerify() {
+  try {
+    const r = await api("/api/verify", { code: state.code });
+    state.current = r;
+    renderResult(r);
+  } catch (e) { toast(e.message, true); }
+}
+
+function renderResult(r) {
+  const box = $("result");
+  const cls = r.level === "ok" ? "ok" : r.level === "warn" ? "warn" : "error";
+  const icon = r.level === "ok" ? "✓" : r.level === "warn" ? "!" : "✕";
+  box.className = "result " + cls;
+
+  let html = `<div class="verdict"><span class="ic">${icon}</span>${esc(r.verdict || "")}</div>`;
+
+  if (r.code && (r.ticket_no || r.memory || r.status)) {
+    html += '<div class="meta">';
+    if (r.ticket_no) html += `<div>作品编号<b>${esc(r.ticket_no)}</b></div>`;
+    if (r.action_id) html += `<div>光影姿态<b>Pose - ${esc(r.action_id)}</b></div>`;
+    if (r.issued_at) html += `<div>发放时间<b>${esc(r.issued_at)}</b></div>`;
+    html += `<div>数据水印<b>${r.watermark ? "完整（正品）" : "缺失（异常）"}</b></div>`;
+    if (r.memory) html += `<div class="wide">专属记忆点<b class="mem">「${esc(r.memory)}」</b></div>`;
+    if (r.redeemed_at) html += `<div class="wide">兑换记录<b>${esc(r.redeemed_at)} · ${esc(r.redeemed_by || "")}</b></div>`;
+    html += "</div>";
+  }
+
+  if (r.can_redeem) {
+    html += `<div class="actions">
+      <button class="btn-redeem" onclick="doRedeem()">确认发放礼品 · 核销</button>
+    </div>`;
+  } else if (r.status === "已兑换礼品") {
+    html += `<div class="actions">
+      <button class="btn-line" onclick="askRevoke()">撤销本次核销（需二级授权）</button>
+    </div>`;
+  }
+  box.innerHTML = html;
+}
+
+/* ---------- 核销 ---------- */
+async function doRedeem(adminCode = "") {
+  if (state.busy || !state.current) return;
+  state.busy = true;
+  try {
+    const r = await api("/api/redeem", { code: state.code, admin_code: adminCode });
+    if (r.need_admin) {          // 数据异常，需要二级口令
+      askAdmin("该凭证数据异常，需二级授权核销", "确认要跳过水印校验、强行核销这张凭证吗？此操作会写入审计日志。", (code) => doRedeem(code));
+      return;
+    }
+    state.current = r;
+    renderResult(r);
+    if (r.stats) renderStats(r.stats);
+    if (r.recent) renderRecent(r.recent);
+    if (r.ok && r.redeem_no) {
+      // 盖个"已兑换"的章，给工作人员一个明确反馈
+      const stamp = document.createElement("div");
+      stamp.className = "stamp";
+      stamp.textContent = "已兑换";
+      $("result").appendChild(stamp);
+      toast("核销成功 · 流水号 " + r.redeem_no);
+    } else {
+      toast(r.verdict || "核销失败", r.level !== "ok");
+    }
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    state.busy = false;
+  }
+}
+
+/* ---------- 撤销核销 ---------- */
+function askRevoke() {
+  askAdmin("撤销核销", "撤销会把这张凭证恢复成「待兑换」，并记入审计日志。请输入二级底层总钥匙。", doRevoke);
+}
+async function doRevoke(adminCode) {
+  const r = await api("/api/revoke", { code: state.code, admin_code: adminCode });
+  if (r.ok) {
+    toast("已撤销核销");
+    state.current = r;
+    renderResult(r);
+    if (r.stats) renderStats(r.stats);
+    if (r.recent) renderRecent(r.recent);
+  } else {
+    toast(r.verdict || "撤销失败", true);
+  }
+}
+
+/* ---------- 二级鉴权弹窗 ---------- */
+function askAdmin(title, desc, onOk) {
+  $("adminTitle").textContent = title;
+  $("adminDesc").textContent = desc;
+  $("adminCode").value = "";
+  $("adminMask").classList.remove("hide");
+  $("adminCode").focus();
+  state.pendingAdmin = onOk;
+}
+$("adminCancel").onclick = () => { $("adminMask").classList.add("hide"); state.pendingAdmin = null; };
+$("adminOk").onclick = async () => {
+  const code = $("adminCode").value.trim();
+  if (!code) { toast("请输入二级口令", true); return; }
+  $("adminMask").classList.add("hide");
+  const fn = state.pendingAdmin;
+  state.pendingAdmin = null;
+  if (fn) await fn(code);
+};
+$("adminCode").addEventListener("keydown", (e) => { if (e.key === "Enter") $("adminOk").click(); });
+
+/* ---------- 小工具：转义，防止记忆点里的特殊字符破坏页面 ---------- */
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* ---------- 启动：先看看是否已登录 ---------- */
+(function boot() {
+  paintBoxes();
+  api("/api/session", undefined, "GET").then((r) => {
+    if (r.logged_in) {
+      state.csrf = r.csrf;
+      state.operator = r.operator;
+      $("login").classList.add("hide");
+      $("app").classList.remove("hide");
+      $("whoName").textContent = r.operator;
+      renderStats(r.stats);
+      renderRecent(r.recent || []);
+    }
+  }).catch(() => {});
+})();
+</script>
+</body>
+</html>

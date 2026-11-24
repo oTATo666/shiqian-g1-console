@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+bridge_env/
+g1_bridge_env/
+
+# Runtime / data / models (download the release package for these)
+runtime/
+models/
+data/
+printed_tickets_backup/
+*.log
+*.wav
+*.lock
+*.tmp
+
+# Local config backups and secrets
+*.bak
+.env
+.env.*
+secrets.*
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Build artifacts
+dist/
+build/
+*.zip
+*.7z
+*.tar.gz
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# Node (if front-end tooling is added later)
+node_modules/
