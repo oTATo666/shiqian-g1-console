@@ -24,6 +24,7 @@
 - **视觉迎宾**：YuNet 人脸 + MediaPipe 行人检测，判断有人在场并触发问候
 - **出票 / 核销**：6 位码池、热敏小票、网页核销后台
 - **配置热更新**：机器人 IP、端口、桥接 Python 路径都可在页面里改
+- **Promise 跨端桥接**：可选把 `/dev`、`/mobile` 与受控写接口桥到 `127.0.0.1:7100`，支持 Tailscale 私网与 `X-Shiqian-Token` 环境变量鉴权
 
 ## 架构
 
@@ -35,7 +36,8 @@
         │  HTTP 代理
         ├── sensor_bridge.py  :5011   DDS / UDP 组播 / MJPEG
         ├── motion_bridge.py  :5012   DDS 动作回放
-        └── vision_bridge.py  :5013   OpenCV 人脸 / 行人检测
+        ├── vision_bridge.py  :5013   OpenCV 人脸 / 行人检测
+        └── Promise Bridge    :7100   跨端页面 / 受控写接口（可选）
                     │
                     ▼
         Unitree G1 (192.168.123.161 / .164)
@@ -49,6 +51,7 @@
 .
 ├─ ①双击启动.bat                 # 免安装包入口（源码运行时用 launcher.py）
 ├─ launcher.py                   # 启动器：找 runtime、开浏览器、拉起 console_ui
+├─ launcher_src/                 # 可选原生启动器源码（WinForms + 托盘 + 进程作业托管）
 ├─ 时迁主控台_1.1.0/              # 主控台 UI + Flask 后端
 │  ├─ console_ui.py
 │  ├─ config.yaml
@@ -124,6 +127,11 @@ C:\Users\<你>\G1_Bridge_Env\Scripts\python.exe
 
 3. **动作桥被误报“未响应”**
    主控台读 `/state` 的超时从 0.9s 放宽到 3s；动作桥对 MotionSwitcher 的模式查询加了 5s 缓存。
+
+4. **新增 Promise 跨端桥接与安全口令**
+   `config.yaml` 增加 `promise_bridge` 段，默认桥到 `http://127.0.0.1:7100`，提供 `/dev`、`/mobile` 页面。跨设备访问及 `/api/bridge/*` 写接口必须设置环境变量 `SHIQIAN_BRIDGE_TOKEN`，并在请求头携带 `X-Shiqian-Token`；本机回环下的 `/api/status`、`/api/stop` 等启动器接口保持兼容。
+
+> 不要把口令写进 `config.yaml`。口令只从 `promise_bridge.token_env` 指定的环境变量读取，默认为 `SHIQIAN_BRIDGE_TOKEN`。
 
 ## 安全与免责
 

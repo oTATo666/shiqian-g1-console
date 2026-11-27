@@ -34,6 +34,15 @@ motion:
   policy_root: D://DATAWORK//G1
   port: 5012
   robotip: 192.168.123.161
+promise_bridge:
+  allow_tailscale: true
+  bind_host: 127.0.0.1
+  enabled: true
+  mobile_path: /mobile
+  promise_auth_header: ''
+  token_env: SHIQIAN_BRIDGE_TOKEN
+  ui_path: /dev
+  url: http://127.0.0.1:7100
 redeem:
   logenabled: true
 sensor:

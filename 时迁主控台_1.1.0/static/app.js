@@ -1,9 +1,50 @@
 let currentTab = 'overview';
 let codesData = [];
 
+// 透明挂载 X-Shiqian-Token 请求头（仅驻留当前浏览器会话内存 sessionStorage，绝不落盘）
+const _SHIQIAN_TOKEN_STORAGE_KEY = 'shiqian_bridge_token';
+let _lastAuthPromptAt = 0;
+(function installShiqianAuthFetch() {
+    const rawFetch = window.fetch.bind(window);
+    window.fetch = function(input, init) {
+        const urlStr = typeof input === 'string' ? input : ((input && input.url) || '');
+        const isLocalApi = urlStr.startsWith('/api/') || urlStr.startsWith(window.location.origin + '/api/');
+        let nextInit = init ? Object.assign({}, init) : {};
+        if (isLocalApi) {
+            const tok = (sessionStorage.getItem(_SHIQIAN_TOKEN_STORAGE_KEY) || '').trim();
+            if (tok) {
+                const hdrs = new Headers(nextInit.headers || {});
+                if (!hdrs.has('X-Shiqian-Token')) {
+                    hdrs.set('X-Shiqian-Token', tok);
+                }
+                nextInit.headers = hdrs;
+            }
+        }
+        return rawFetch(input, nextInit).then(resp => {
+            if (isLocalApi && (resp.status === 401 || resp.status === 403)) {
+                resp.clone().json().then(j => {
+                    if (j && j.auth_required && Date.now() - _lastAuthPromptAt > 4000) {
+                        _lastAuthPromptAt = Date.now();
+                        const drawer = document.getElementById('promise-drawer');
+                        if (drawer && !drawer.classList.contains('open')) {
+                            drawer.classList.add('open');
+                        }
+                        const inp = document.getElementById('prm-session-token');
+                        if (inp) inp.focus();
+                        showToast(j.msg || '需要验证 X-Shiqian-Token 跨端操控口令', 'error');
+                    }
+                }).catch(() => {});
+            }
+            return resp;
+        });
+    };
+})();
+
 function switchTab(tabId) {
     document.querySelectorAll('main > div > section').forEach(el => el.classList.add('hidden'));
     document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+    const mobSel = document.getElementById('prm-mobile-tab');
+    if (mobSel && mobSel.value !== tabId) mobSel.value = tabId;
     
     document.querySelectorAll('nav button').forEach(btn => {
         btn.classList.remove('bg-indigo-50', 'text-indigo-600');
@@ -40,6 +81,7 @@ function showToast(message, type = 'success') {
 
 function checkHealth() {
     refreshLlmBadge();
+    refreshPromiseStatus(false);
     fetch('/api/health')
         .then(res => res.json())
         .then(data => {
@@ -49,6 +91,9 @@ function checkHealth() {
                     document.getElementById('health-banner').classList.remove('hidden');
                 } else {
                     document.getElementById('health-banner').classList.add('hidden');
+                }
+                if (info.auth) {
+                    updateAuthAndNetworkBadges(info.auth);
                 }
             }
         });
@@ -364,6 +409,13 @@ function loadConfigToForm() {
                 if (form.elements['avatar_boot_enabled']) form.elements['avatar_boot_enabled'].checked = cfg.avatar.boot_enabled !== false;
                 if (form.elements['avatar_boot_duration_ms']) form.elements['avatar_boot_duration_ms'].value = cfg.avatar.boot_duration_ms || 4200;
             }
+            const pb = cfg.promise_bridge || {};
+            if (form.elements['promise_url']) form.elements['promise_url'].value = pb.url || 'http://127.0.0.1:7100';
+            if (form.elements['promise_token_env']) form.elements['promise_token_env'].value = pb.token_env || 'SHIQIAN_BRIDGE_TOKEN';
+            if (form.elements['promise_bind_host']) form.elements['promise_bind_host'].value = pb.bind_host || '127.0.0.1';
+            if (form.elements['promise_auth_header']) form.elements['promise_auth_header'].value = pb.promise_auth_header || '';
+            if (form.elements['promise_enabled']) form.elements['promise_enabled'].checked = pb.enabled !== false;
+            if (form.elements['promise_allow_tailscale']) form.elements['promise_allow_tailscale'].checked = pb.allow_tailscale !== false;
         }
     });
 }
@@ -405,6 +457,14 @@ function saveConfig(e) {
             enabled: form.elements['avatar_enabled'] ? !!form.elements['avatar_enabled'].checked : true,
             boot_enabled: form.elements['avatar_boot_enabled'] ? !!form.elements['avatar_boot_enabled'].checked : true,
             boot_duration_ms: parseInt(form.elements['avatar_boot_duration_ms'] && form.elements['avatar_boot_duration_ms'].value) || 4200
+        },
+        promise_bridge: {
+            enabled: form.elements['promise_enabled'] ? !!form.elements['promise_enabled'].checked : true,
+            url: (form.elements['promise_url'] && form.elements['promise_url'].value.trim()) || 'http://127.0.0.1:7100',
+            token_env: (form.elements['promise_token_env'] && form.elements['promise_token_env'].value.trim()) || 'SHIQIAN_BRIDGE_TOKEN',
+            bind_host: (form.elements['promise_bind_host'] && form.elements['promise_bind_host'].value.trim()) || '127.0.0.1',
+            promise_auth_header: (form.elements['promise_auth_header'] && form.elements['promise_auth_header'].value) || '',
+            allow_tailscale: form.elements['promise_allow_tailscale'] ? !!form.elements['promise_allow_tailscale'].checked : true
         }
     };
 
@@ -414,7 +474,8 @@ function saveConfig(e) {
         body: JSON.stringify(newConfig)
     }).then(res => res.json()).then(data => {
         if (data.ok) {
-            showToast('配置保存成功！端口改动需重启服务生效。');
+            showToast('配置保存成功！端口或监听网卡改动需重启服务生效。');
+            refreshPromiseStatus(true);
         } else {
             showToast(data.msg || '保存失败', 'error');
         }
@@ -1638,6 +1699,314 @@ function uploadAvatarAsset(slot, input) {
         .catch(() => showToast('上传请求失败', 'error'));
 }
 
+/* ==================================================================
+   Promise 主控台 (:7100) 跨端桥接、顶部栏状态灯与快捷远程操控
+   ================================================================== */
+let _latestPromiseSnap = null;
+let _latestTailscaleIps = [];
+
+function resolveCrossDeviceUrl(rawUrl) {
+    if (!rawUrl) return 'http://127.0.0.1:7100/dev';
+    try {
+        const u = new URL(rawUrl, window.location.origin);
+        const viewerHost = window.location.hostname;
+        const viewerIsRemote = viewerHost && viewerHost !== '127.0.0.1' && viewerHost !== 'localhost' && viewerHost !== '::1';
+        if (viewerIsRemote && (u.hostname === '127.0.0.1' || u.hostname === 'localhost')) {
+            u.hostname = viewerHost;
+        }
+        return u.toString();
+    } catch (e) {
+        return rawUrl;
+    }
+}
+
+function updateAuthAndNetworkBadges(auth) {
+    if (!auth) return;
+    const port = window.location.port || '5000';
+    const bindLabel = document.getElementById('prm-bind-label');
+    if (bindLabel) {
+        bindLabel.innerText = `${auth.bind_host || '127.0.0.1'}:${port}`;
+    }
+
+    const tsIps = auth.local_tailscale_ips || [];
+    _latestTailscaleIps = tsIps;
+    const tsChip = document.getElementById('prm-ts-chip');
+    const tsText = document.getElementById('prm-ts-ip-text');
+    if (tsChip && tsText) {
+        if (tsIps.length > 0) {
+            tsChip.style.display = 'inline-flex';
+            tsText.innerText = `${tsIps[0]}:${port}`;
+        } else {
+            tsChip.style.display = 'none';
+        }
+    }
+
+    const tsTargetWrap = document.getElementById('prm-ts-target-chips');
+    if (tsTargetWrap) {
+        tsTargetWrap.innerHTML = tsIps.map(ip =>
+            `<button type="button" class="prm-chip-btn" onclick="switchPromiseTargetUrl('http://${ip}:7100')">Tailscale ${ip}:7100</button>`
+        ).join('');
+    }
+
+    const hasSessionTok = !!(sessionStorage.getItem(_SHIQIAN_TOKEN_STORAGE_KEY) || '').trim();
+    const badge = document.getElementById('prm-auth-badge');
+    if (badge) {
+        if (auth.token_configured) {
+            badge.innerText = hasSessionTok ? `🔐 ${auth.header} 已就绪` : `🔒 需验证 ${auth.header}`;
+            badge.style.background = hasSessionTok ? '#ecfdf5' : '#fef3c7';
+            badge.style.color = hasSessionTok ? '#065f46' : '#92400e';
+        } else if (auth.remote_client) {
+            badge.innerText = `⚠️ 服务端未配 ${auth.token_env}`;
+            badge.style.background = '#fee2e2';
+            badge.style.color = '#b91c1c';
+        } else {
+            badge.innerText = `本机回环 · 远程需 ${auth.token_env}`;
+            badge.style.background = '#f1f5f9';
+            badge.style.color = '#475569';
+        }
+    }
+
+    const envHint = document.getElementById('promise-token-env-hint');
+    if (envHint) {
+        envHint.innerText = auth.token_configured
+            ? `✅ 已检测到环境变量 ${auth.token_env}（明文不落盘）`
+            : `ℹ️ 当前未设置环境变量 ${auth.token_env}（本机可用，跨设备远程操控已自动锁定）`;
+        envHint.className = 'text-xs font-medium ' + (auth.token_configured ? 'text-emerald-600' : 'text-slate-500');
+    }
+}
+
+function refreshPromiseStatus(manual = false) {
+    fetch('/api/promise/status')
+        .then(r => r.json())
+        .then(res => {
+            if (!res || !res.data) return;
+            _latestPromiseSnap = res.data;
+            renderPromiseStatus(res.data);
+            if (manual) {
+                showToast(res.msg || (res.data.connected ? 'Promise 在线' : 'Promise 未连通'), res.data.connected ? 'success' : 'error');
+            }
+        })
+        .catch(() => {});
+}
+
+function renderPromiseStatus(snap) {
+    const pill = document.getElementById('promise-status-pill');
+    const dot = document.getElementById('promise-status-dot');
+    const label = document.getElementById('promise-status-label');
+    const directLink = document.getElementById('promise-direct-link');
+    const mobileLink = document.getElementById('promise-mobile-link');
+    const targetInp = document.getElementById('prm-target-url');
+    const teleLine = document.getElementById('prm-telemetry-line');
+
+    if (directLink && snap.ui_url) directLink.href = resolveCrossDeviceUrl(snap.ui_url);
+    if (mobileLink && snap.mobile_url) mobileLink.href = resolveCrossDeviceUrl(snap.mobile_url);
+    if (targetInp && document.activeElement !== targetInp && snap.url) {
+        targetInp.value = snap.url;
+    }
+
+    const p = snap.promise || {};
+    const frozen = !!p.emergency_frozen;
+    let hostShort = '127.0.0.1:7100';
+    try { hostShort = new URL(snap.url).host; } catch (e) {}
+
+    if (pill && dot && label) {
+        if (!snap.enabled) {
+            pill.className = 'prm-pill offline';
+            dot.className = 'prm-dot offline';
+            label.innerText = 'Promise 主控台 · 已禁用';
+        } else if (snap.connected && frozen) {
+            pill.className = 'prm-pill frozen';
+            dot.className = 'prm-dot frozen';
+            label.innerText = `Promise 紧急冻结 · ${hostShort}`;
+        } else if (snap.connected) {
+            pill.className = 'prm-pill online';
+            dot.className = 'prm-dot online';
+            const ms = snap.latency_ms !== null && snap.latency_ms !== undefined ? ` · ${snap.latency_ms}ms` : '';
+            label.innerText = `Promise 在线 (${hostShort}${ms})`;
+        } else {
+            pill.className = 'prm-pill offline';
+            dot.className = 'prm-dot offline';
+            label.innerText = `Promise 离线 (${hostShort})`;
+        }
+    }
+
+    if (teleLine) {
+        if (snap.connected) {
+            const ag = p.agent_states || {};
+            const jy = ag.jinyan || 'idle';
+            const xl = ag.xingluo || 'idle';
+            const auditTxt = p.audit_chain_valid !== false ? '审计链完整' : '审计链异常';
+            const freezeTxt = frozen ? ' · ⚠️ 紧急冻结中' : '';
+            const batchTxt = (p.batches_count !== null && p.batches_count !== undefined) ? ` · 批次 ${p.batches_count}` : '';
+            teleLine.innerText = `节点 ${snap.url} 在线（${snap.latency_ms || 0}ms）｜瑾妍: ${jy} · 星落: ${xl} · ${auditTxt}${batchTxt}${freezeTxt}`;
+        } else {
+            teleLine.innerText = `节点 ${snap.url || 'http://127.0.0.1:7100'} 未连接：${snap.error || '服务未启动'}（可先双击桌面 Promise_Workbench 启动）`;
+        }
+    }
+}
+
+function togglePromiseDrawer() {
+    const drawer = document.getElementById('promise-drawer');
+    const btn = document.getElementById('promise-drawer-btn');
+    if (!drawer) return;
+    const isOpen = drawer.classList.toggle('open');
+    if (btn) btn.innerHTML = isOpen ? '<span>⚡ 收起操控 ▴</span>' : '<span>⚡ 远程操控 ▾</span>';
+    if (isOpen) refreshPromiseStatus(false);
+}
+
+function saveSessionBridgeToken() {
+    const inp = document.getElementById('prm-session-token');
+    if (!inp) return;
+    const val = inp.value.trim();
+    if (!val) {
+        showToast('请输入 X-Shiqian-Token 口令', 'error');
+        return;
+    }
+    sessionStorage.setItem(_SHIQIAN_TOKEN_STORAGE_KEY, val);
+    inp.value = '';
+    inp.placeholder = '已载入当前会话口令（仅驻留内存，关闭标签页自动销毁）';
+    showToast('X-Shiqian-Token 会话口令已生效');
+    checkHealth();
+}
+
+function clearSessionBridgeToken() {
+    sessionStorage.removeItem(_SHIQIAN_TOKEN_STORAGE_KEY);
+    const inp = document.getElementById('prm-session-token');
+    if (inp) {
+        inp.value = '';
+        inp.placeholder = '输入 X-Shiqian-Token 会话口令（仅存浏览器内存，不落盘）';
+    }
+    showToast('已清除当前浏览器会话口令');
+    checkHealth();
+}
+
+function copyTailscaleConsoleUrl() {
+    if (!_latestTailscaleIps.length) return;
+    const port = window.location.port || '5000';
+    const url = `http://${_latestTailscaleIps[0]}:${port}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => showToast('已复制跨端访问地址：' + url));
+    } else {
+        prompt('复制跨端访问地址：', url);
+    }
+}
+
+function switchPromiseTargetUrl(presetUrl) {
+    const inp = document.getElementById('prm-target-url');
+    const targetUrl = (presetUrl || (inp && inp.value) || '').trim();
+    if (!targetUrl) {
+        showToast('请输入 Promise 主控台地址', 'error');
+        return;
+    }
+    fetch('/api/promise/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_url', url: targetUrl })
+    })
+        .then(r => r.json())
+        .then(res => {
+            const resLine = document.getElementById('prm-last-result');
+            if (resLine) resLine.innerText = res.msg || '';
+            if (res.ok) {
+                if (res.data) renderPromiseStatus(res.data);
+                if (currentTab === 'settings') loadConfigToForm();
+                showToast(res.msg || '目标地址已切换');
+            } else {
+                showToast(res.msg || '切换失败', 'error');
+            }
+        })
+        .catch(() => showToast('切换目标请求失败', 'error'));
+}
+
+function fillPromisePreset(text) {
+    const inp = document.getElementById('prm-cmd-input');
+    if (inp) {
+        inp.value = text;
+        inp.focus();
+    }
+}
+
+function checkPromiseNow() {
+    const resLine = document.getElementById('prm-last-result');
+    if (resLine) resLine.innerText = '正在向 Promise 发起实时状态检查...';
+    fetch('/api/promise/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'status' })
+    })
+        .then(r => r.json())
+        .then(res => {
+            if (res.data) renderPromiseStatus(res.data);
+            if (resLine) resLine.innerText = `[${new Date().toLocaleTimeString()}] ${res.msg || ''}`;
+            showToast(res.msg || '状态检查完成', res.ok ? 'success' : 'error');
+        })
+        .catch(() => showToast('Promise 状态检查请求失败', 'error'));
+}
+
+function sendPromiseTask() {
+    const inp = document.getElementById('prm-cmd-input');
+    const targetSel = document.getElementById('prm-cmd-target');
+    const resLine = document.getElementById('prm-last-result');
+    const command = (inp && inp.value || '').trim();
+    const target = (targetSel && targetSel.value) || 'agent.jinyan';
+    if (!command) {
+        showToast('请输入要发送给 Promise 的任务指令', 'error');
+        if (inp) inp.focus();
+        return;
+    }
+    if (resLine) resLine.innerText = `正在向 ${target} 发送指令...`;
+    fetch('/api/promise/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'task', target, command })
+    })
+        .then(r => r.json())
+        .then(res => {
+            if (resLine) resLine.innerText = `[${new Date().toLocaleTimeString()}] ${res.msg || ''}`;
+            if (res.ok) {
+                if (inp) inp.value = '';
+                showToast(res.msg || '任务指令已送达 Promise');
+                refreshPromiseStatus(false);
+            } else {
+                showToast(res.msg || '指令发送失败', 'error');
+            }
+        })
+        .catch(() => showToast('指令发送异常', 'error'));
+}
+
+function triggerPromiseEmergencyStop(alsoLocal = false) {
+    const tip = alsoLocal
+        ? '确定要执行【双端联动急停】吗？\n将同时紧急冻结 Promise 主控台 (:7100) 并停止本机时迁全部机器人桥接模块！'
+        : '确定要向 Promise 主控台 (:7100) 发送【紧急停止】指令吗？';
+    if (!confirm(tip)) return;
+    const resLine = document.getElementById('prm-last-result');
+    fetch('/api/promise/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'emergency_stop',
+            also_stop_local: !!alsoLocal,
+            reason: alsoLocal ? 'dual_emergency_stop_from_shiqian' : 'remote_emergency_stop_from_shiqian'
+        })
+    })
+        .then(r => r.json())
+        .then(res => {
+            if (resLine) resLine.innerText = `[${new Date().toLocaleTimeString()}] ${res.msg || ''}`;
+            showToast(res.msg || (res.ok ? '已执行紧急停止' : '紧急停止执行异常'), res.ok ? 'success' : 'error');
+            checkHealth();
+        })
+        .catch(() => showToast('紧急停止请求异常', 'error'));
+}
+
+function initPromiseBridgeUI() {
+    const inp = document.getElementById('prm-session-token');
+    if (inp && (sessionStorage.getItem(_SHIQIAN_TOKEN_STORAGE_KEY) || '').trim()) {
+        inp.placeholder = '已载入当前会话口令（仅驻留内存，关闭标签页自动销毁）';
+    }
+    refreshPromiseStatus(false);
+}
+
 window.addEventListener('DOMContentLoaded', () => {
     initAvatarSystem();
+    initPromiseBridgeUI();
 });

@@ -2,6 +2,10 @@ import os
 import sys
 import time
 import json
+import hmac
+import socket
+import ipaddress
+import re
 import shutil
 import subprocess
 import threading
@@ -280,7 +284,18 @@ def _default_config():
         "server": {
             "consoleport": 5000,
             "redeemport": 5001,
-            "mock_port": 5002
+            "mock_port": 5002,
+            "bind_host": "127.0.0.1",
+        },
+        "promise_bridge": {
+            "enabled": True,
+            "url": "http://127.0.0.1:7100",
+            "ui_path": "/dev",
+            "mobile_path": "/mobile",
+            "token_env": "SHIQIAN_BRIDGE_TOKEN",
+            "promise_auth_header": "",
+            "bind_host": "127.0.0.1",
+            "allow_tailscale": True,
         },
         "llm": {
             "apiurl": "",
@@ -437,6 +452,28 @@ def save_config(data):
                 for k, v in value.items():
                     cfg[section].setdefault(k, v)   # 只补缺，不覆盖用户这次改的值
 
+    # 防止 promise_bridge 误传入任何明文 token/secret 落盘
+    pb = cfg.get("promise_bridge")
+    if isinstance(pb, dict):
+        for forbidden_key in ("token", "secret", "apikey", "password", "credential"):
+            pb.pop(forbidden_key, None)
+        t_env = str(pb.get("token_env") or "SHIQIAN_BRIDGE_TOKEN").strip()
+        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]{1,63}$", t_env):
+            problems.append("promise_bridge.token_env 必须是合法的环境变量名（如 SHIQIAN_BRIDGE_TOKEN）")
+            t_env = "SHIQIAN_BRIDGE_TOKEN"
+        pb["token_env"] = t_env
+        raw_url = str(pb.get("url") or "http://127.0.0.1:7100").strip().rstrip("/")
+        if "@" in raw_url:
+            problems.append("Promise 地址中禁止内嵌账号或密码，请仅通过环境变量配置密钥")
+            raw_url = "http://127.0.0.1:7100"
+        pb["url"] = raw_url or "http://127.0.0.1:7100"
+        b_host = str(pb.get("bind_host") or "127.0.0.1").strip()
+        ok_host, norm_host, host_err = _validate_bind_host(b_host, bool(pb.get("allow_tailscale", True)))
+        if not ok_host:
+            problems.append(host_err)
+        else:
+            pb["bind_host"] = norm_host
+
     _write_config_file(cfg)
     _sensor_py_cache["checked"] = False
     _sensor_py_cache["ts"] = 0.0
@@ -556,7 +593,8 @@ def api_health():
             "dependencies_installed": deps_ok,
             "config_exists": config_exists,
             "codes_exists": codes_exists,
-            "requirements_exists": req_exists
+            "requirements_exists": req_exists,
+            "auth": _auth_public_meta(),
         },
         "msg": "体检正常"
     })
@@ -739,6 +777,7 @@ def api_status():
             "g1_connected": g1_connected,
             "sensor": sensor,
             "motion": motion,
+            "promise": _probe_promise_cached(),
         },
         "msg": "获取状态成功"
     })
@@ -2457,6 +2496,636 @@ def _port_pids(port):
     return sorted(set(pids))
 
 
+# ======================================================================
+# Promise 主控台 (:7100) 跨设备双向桥接 & X-Shiqian-Token 安全鉴权
+# ======================================================================
+TAILSCALE_CGNAT_NET = ipaddress.IPv4Network("100.64.0.0/10")
+SHIQIAN_TOKEN_HEADER = "X-Shiqian-Token"
+_TAILSCALE_IP_CACHE = {"ts": 0.0, "ips": []}
+_PROMISE_STATUS_CACHE = {"ts": 0.0, "data": None}
+
+# 即使在 127.0.0.1 回环访问，只要配置了 SHIQIAN_BRIDGE_TOKEN 也需要校验 X-Shiqian-Token 的操控写接口；
+# 注意保持本地 GET /api/status 与本地 POST /api/stop 向后兼容桌面启动器。
+_LOCAL_COMPAT_PATHS = frozenset({
+    "/api/health",
+    "/api/avatar/info",
+    "/api/status",
+    "/api/stop",
+    "/api/logs",
+    "/api/llm/status",
+    "/api/promise/status",
+})
+
+
+def _is_loopback_addr(addr_str):
+    raw = str(addr_str or "").strip().lower()
+    if raw in ("127.0.0.1", "::1", "localhost"):
+        return True
+    if raw.startswith("::ffff:127."):
+        return True
+    try:
+        return ipaddress.ip_address(raw).is_loopback
+    except ValueError:
+        return False
+
+
+def _is_tailscale_ip(addr_str):
+    raw = str(addr_str or "").strip()
+    if raw.startswith("::ffff:"):
+        raw = raw[7:]
+    try:
+        ip = ipaddress.ip_address(raw)
+        return isinstance(ip, ipaddress.IPv4Address) and ip in TAILSCALE_CGNAT_NET
+    except ValueError:
+        return False
+
+
+def _detect_tailscale_ips(force=False):
+    now = time.time()
+    if not force and (now - _TAILSCALE_IP_CACHE["ts"] < 30.0):
+        return list(_TAILSCALE_IP_CACHE["ips"])
+    found = set()
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            cand = info[4][0]
+            if _is_tailscale_ip(cand):
+                found.add(cand)
+    except Exception:
+        pass
+    try:
+        if os.name == "nt":
+            out = subprocess.run(
+                ["ipconfig"], capture_output=True, text=True, timeout=3, errors="ignore"
+            ).stdout
+            for m in re.findall(r"\b(100\.\d{1,3}\.\d{1,3}\.\d{1,3})\b", out or ""):
+                if _is_tailscale_ip(m):
+                    found.add(m)
+        else:
+            out = subprocess.run(
+                ["ip", "-4", "-o", "addr"], capture_output=True, text=True, timeout=3, errors="ignore"
+            ).stdout
+            for m in re.findall(r"\b(100\.\d{1,3}\.\d{1,3}\.\d{1,3})\b", out or ""):
+                if _is_tailscale_ip(m):
+                    found.add(m)
+    except Exception:
+        pass
+    ips = sorted(found)
+    _TAILSCALE_IP_CACHE["ts"] = now
+    _TAILSCALE_IP_CACHE["ips"] = ips
+    return list(ips)
+
+
+def _validate_bind_host(host_raw, allow_tailscale=True):
+    cleaned = str(host_raw or "127.0.0.1").strip()
+    if not cleaned or cleaned.lower() == "localhost" or cleaned == "127.0.0.1":
+        return True, "127.0.0.1", ""
+    if cleaned.lower() == "tailscale":
+        if not allow_tailscale:
+            return False, "127.0.0.1", "未启用 allow_tailscale，无法绑定 tailscale 网卡"
+        return True, "tailscale", ""
+    if cleaned == "0.0.0.0":
+        return True, "0.0.0.0", ""
+    try:
+        ip = ipaddress.ip_address(cleaned)
+    except ValueError:
+        return False, "127.0.0.1", f"无效的监听地址：{cleaned}"
+    if ip.is_loopback:
+        return True, "127.0.0.1", ""
+    if isinstance(ip, ipaddress.IPv4Address) and ip in TAILSCALE_CGNAT_NET:
+        if not allow_tailscale:
+            return False, "127.0.0.1", "未启用 allow_tailscale，无法绑定 Tailscale IP"
+        return True, cleaned, ""
+    if ip.is_private and not ip.is_multicast and not ip.is_unspecified:
+        return True, cleaned, ""
+    return False, "127.0.0.1", f"安全策略拒绝绑定公网或非法地址：{cleaned}"
+
+
+def _promise_cfg(cfg=None):
+    c = cfg if isinstance(cfg, dict) else load_config()
+    pb = dict(c.get("promise_bridge") or {})
+    srv = dict(c.get("server") or {})
+    url = str(os.environ.get("SHIQIAN_PROMISE_URL") or pb.get("url") or "http://127.0.0.1:7100").strip().rstrip("/")
+    if not url:
+        url = "http://127.0.0.1:7100"
+    ui_path = str(pb.get("ui_path") or "/dev").strip()
+    if ui_path and not ui_path.startswith("/"):
+        ui_path = "/" + ui_path
+    mobile_path = str(pb.get("mobile_path") or "/mobile").strip()
+    if mobile_path and not mobile_path.startswith("/"):
+        mobile_path = "/" + mobile_path
+    token_env = str(pb.get("token_env") or "SHIQIAN_BRIDGE_TOKEN").strip() or "SHIQIAN_BRIDGE_TOKEN"
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]{1,63}$", token_env):
+        token_env = "SHIQIAN_BRIDGE_TOKEN"
+    bind_host = str(
+        os.environ.get("SHIQIAN_CONSOLE_HOST")
+        or pb.get("bind_host")
+        or srv.get("bind_host")
+        or srv.get("host")
+        or "127.0.0.1"
+    ).strip()
+    return {
+        "enabled": bool(pb.get("enabled", True)),
+        "url": url,
+        "ui_path": ui_path or "/dev",
+        "mobile_path": mobile_path or "/mobile",
+        "ui_url": url + (ui_path or "/dev"),
+        "mobile_url": url + (mobile_path or "/mobile"),
+        "token_env": token_env,
+        "promise_auth_header": str(pb.get("promise_auth_header") or "").strip(),
+        "bind_host": bind_host,
+        "allow_tailscale": bool(pb.get("allow_tailscale", True)),
+    }
+
+
+def _bridge_expected_token(pb=None):
+    info = pb or _promise_cfg()
+    return (os.environ.get(info["token_env"]) or "").strip()
+
+
+def _auth_public_meta():
+    pb = _promise_cfg()
+    expected = _bridge_expected_token(pb)
+    remote_ip = request.remote_addr or ""
+    is_loop = _is_loopback_addr(remote_ip)
+    return {
+        "header": SHIQIAN_TOKEN_HEADER,
+        "token_env": pb["token_env"],
+        "token_configured": bool(expected),
+        "remote_client": not is_loop,
+        "auth_required": (not is_loop) or bool(expected),
+        "bind_host": pb["bind_host"],
+        "local_tailscale_ips": _detect_tailscale_ips(),
+    }
+
+
+def _verify_shiqian_token_value(presented, expected):
+    if not expected or not presented:
+        return False
+    try:
+        return hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8"))
+    except Exception:
+        return False
+
+
+@app.before_request
+def _guard_remote_control():
+    path = request.path or "/"
+    remote_ip = request.remote_addr or ""
+    is_loop = _is_loopback_addr(remote_ip)
+    pb = _promise_cfg()
+
+    # 1. 非回环访问时先做网络来源白名单校验（默认仅放行回环 + Tailscale 100.64.0.0/10，除非显式绑定内网/0.0.0.0）
+    if not is_loop:
+        is_ts = _is_tailscale_ip(remote_ip)
+        if is_ts and not pb["allow_tailscale"]:
+            add_log(f"[安全] 已拦截未授权 Tailscale 来源访问：{remote_ip} {path}")
+            return jsonify({"ok": False, "msg": "Tailscale 跨端访问已在配置中禁用"}), 403
+        if not is_ts and pb["bind_host"] not in ("0.0.0.0", remote_ip):
+            add_log(f"[安全] 已拦截非受信网段访问：{remote_ip} {path}")
+            return jsonify({"ok": False, "msg": "仅允许本机或 Tailscale 私网访问"}), 403
+
+    # 静态资源与首页壳层允许加载，以便跨端浏览器展示界面并输入 X-Shiqian-Token
+    if not path.startswith("/api/"):
+        return None
+
+    expected = _bridge_expected_token(pb)
+    presented = request.headers.get(SHIQIAN_TOKEN_HEADER)
+
+    # 2. 专用入站桥接接口 /api/bridge/* 始终强制要求环境变量密钥与有效 X-Shiqian-Token
+    if path.startswith("/api/bridge/"):
+        if not expected:
+            return jsonify({
+                "ok": False,
+                "auth_required": True,
+                "header": SHIQIAN_TOKEN_HEADER,
+                "msg": f"服务端尚未设置环境变量 {pb['token_env']}，远程桥接接口已安全锁定",
+            }), 403
+        if not _verify_shiqian_token_value(presented or "", expected):
+            add_log(f"[安全] 拒绝无效 {SHIQIAN_TOKEN_HEADER} 访问 {path}（来源 {remote_ip}）")
+            return jsonify({
+                "ok": False,
+                "auth_required": True,
+                "header": SHIQIAN_TOKEN_HEADER,
+                "msg": f"缺少或无效的请求头 {SHIQIAN_TOKEN_HEADER}",
+            }), 401
+        return None
+
+    # 3. 任何请求只要显式携带了 X-Shiqian-Token 请求头，立即严格校验
+    if presented is not None:
+        if not expected:
+            return jsonify({
+                "ok": False,
+                "auth_required": True,
+                "header": SHIQIAN_TOKEN_HEADER,
+                "msg": f"服务端未配置环境变量 {pb['token_env']}，无法校验 {SHIQIAN_TOKEN_HEADER}",
+            }), 401
+        if not _verify_shiqian_token_value(presented, expected):
+            add_log(f"[安全] {SHIQIAN_TOKEN_HEADER} 校验失败：{path}（来源 {remote_ip}）")
+            return jsonify({
+                "ok": False,
+                "auth_required": True,
+                "header": SHIQIAN_TOKEN_HEADER,
+                "msg": f"{SHIQIAN_TOKEN_HEADER} 口令不匹配",
+            }), 401
+        return None
+
+    # 4. 跨设备（非 127.0.0.1）访问：仅放行 /api/health 与 /api/avatar/info 供前端初始化，其余接口一律强制鉴权
+    if not is_loop:
+        if path in ("/api/health", "/api/avatar/info") and request.method == "GET":
+            return None
+        if not expected:
+            return jsonify({
+                "ok": False,
+                "auth_required": True,
+                "header": SHIQIAN_TOKEN_HEADER,
+                "msg": f"跨设备访问需先在服务端设置环境变量 {pb['token_env']}",
+            }), 403
+        return jsonify({
+            "ok": False,
+            "auth_required": True,
+            "header": SHIQIAN_TOKEN_HEADER,
+            "msg": f"跨设备操控需携带请求头 {SHIQIAN_TOKEN_HEADER}",
+        }), 401
+
+    # 5. 本机回环访问：当已配置 SHIQIAN_BRIDGE_TOKEN 时，对所有远程操控接口校验 X-Shiqian-Token，
+    #    同时保持 /api/status 与 /api/stop 等兼容接口免口令可用
+    if expected and path not in _LOCAL_COMPAT_PATHS:
+        return jsonify({
+            "ok": False,
+            "auth_required": True,
+            "header": SHIQIAN_TOKEN_HEADER,
+            "msg": f"已启用桥接安全口令，请在请求头携带 {SHIQIAN_TOKEN_HEADER}（或在顶部远程面板填入会话口令）",
+        }), 401
+
+    return None
+
+
+def _promise_outgoing_headers(pb, include_custom_channel=True):
+    headers = {"Accept": "application/json"}
+    token = _bridge_expected_token(pb)
+    if token:
+        headers[SHIQIAN_TOKEN_HEADER] = token
+        custom_hdr = pb.get("promise_auth_header") or ""
+        if include_custom_channel and custom_hdr and custom_hdr != SHIQIAN_TOKEN_HEADER:
+            headers[custom_hdr] = token
+    return headers
+
+
+def _is_url_tailscale(url_str):
+    m = re.match(r"^https?://([^/:]+)", str(url_str or "").strip())
+    if not m:
+        return False
+    return _is_tailscale_ip(m.group(1))
+
+
+def _probe_promise(full=True):
+    pb = _promise_cfg()
+    token_present = bool(_bridge_expected_token(pb))
+    result = {
+        "enabled": pb["enabled"],
+        "connected": False,
+        "url": pb["url"],
+        "ui_url": pb["ui_url"],
+        "mobile_url": pb["mobile_url"],
+        "is_tailscale": _is_url_tailscale(pb["url"]),
+        "latency_ms": None,
+        "token_env": pb["token_env"],
+        "token_configured": token_present,
+        "bind_host": pb["bind_host"],
+        "local_tailscale_ips": _detect_tailscale_ips(),
+        "error": "",
+        "promise": None,
+    }
+    if not pb["enabled"]:
+        result["error"] = "已在配置中禁用 Promise 桥接"
+        return result
+
+    headers = _promise_outgoing_headers(pb, include_custom_channel=False)
+    t0 = time.perf_counter()
+    try:
+        rh = LOCAL.get(pb["url"] + "/healthz", headers=headers, timeout=1.5)
+        latency = int((time.perf_counter() - t0) * 1000)
+        result["latency_ms"] = latency
+        if rh.status_code != 200:
+            result["error"] = f"HTTP {rh.status_code}"
+            return result
+        hj = rh.json() if rh.content else {}
+    except Exception as e:
+        result["error"] = f"未连通 ({type(e).__name__})"
+        return result
+
+    pinfo = {
+        "status": hj.get("status", "ok"),
+        "schema_version": hj.get("schema_version", ""),
+        "bind_host": hj.get("bind_host", ""),
+        "port": hj.get("port", 7100),
+        "audit_chain_valid": hj.get("audit_chain_valid", True),
+        "audit_checked_rows": hj.get("audit_checked_rows", 0),
+        "emergency_frozen": False,
+        "active_sse_sessions": 0,
+        "agent_states": {},
+        "processes": [],
+        "batches_count": None,
+    }
+
+    if full:
+        try:
+            ro = LOCAL.get(pb["url"] + "/api/dev/observability", headers=headers, timeout=1.5)
+            if ro.status_code == 200 and ro.content:
+                oj = ro.json()
+                pinfo["emergency_frozen"] = bool(oj.get("emergency_frozen", False))
+                pinfo["active_sse_sessions"] = int(oj.get("active_sse_sessions") or 0)
+                procs = oj.get("processes") or []
+                pinfo["processes"] = procs
+                ag = {}
+                for pr in procs:
+                    nm = str(pr.get("name") or "")
+                    if nm.startswith("agent_"):
+                        ag[nm.replace("agent_", "")] = pr.get("state", "unknown")
+                pinfo["agent_states"] = ag
+        except Exception:
+            pass
+
+        try:
+            rb = LOCAL.get(pb["url"] + "/api/dev/batches", headers=headers, timeout=1.2)
+            if rb.status_code == 200 and rb.content:
+                bj = rb.json()
+                if isinstance(bj, list):
+                    pinfo["batches_count"] = len(bj)
+        except Exception:
+            pass
+
+    result["connected"] = True
+    result["promise"] = pinfo
+    _PROMISE_STATUS_CACHE["ts"] = time.time()
+    _PROMISE_STATUS_CACHE["data"] = {
+        "connected": True,
+        "url": pb["url"],
+        "ui_url": pb["ui_url"],
+        "mobile_url": pb["mobile_url"],
+        "latency_ms": result["latency_ms"],
+        "emergency_frozen": pinfo["emergency_frozen"],
+    }
+    return result
+
+
+def _probe_promise_cached():
+    now = time.time()
+    if _PROMISE_STATUS_CACHE["data"] is not None and (now - _PROMISE_STATUS_CACHE["ts"] < 3.0):
+        return dict(_PROMISE_STATUS_CACHE["data"])
+    snap = _probe_promise(full=False)
+    slim = {
+        "connected": snap["connected"],
+        "url": snap["url"],
+        "ui_url": snap["ui_url"],
+        "mobile_url": snap["mobile_url"],
+        "latency_ms": snap["latency_ms"],
+        "emergency_frozen": bool((snap.get("promise") or {}).get("emergency_frozen", False)),
+    }
+    _PROMISE_STATUS_CACHE["ts"] = now
+    _PROMISE_STATUS_CACHE["data"] = slim
+    return slim
+
+
+@app.route("/api/promise/status", methods=["GET"])
+def api_promise_status():
+    snap = _probe_promise(full=True)
+    msg = "Promise 主控台在线" if snap["connected"] else f"Promise 主控台未连接：{snap['error'] or '离线'}"
+    return jsonify({"ok": True, "data": snap, "msg": msg})
+
+
+@app.route("/api/promise/control", methods=["POST"])
+def api_promise_control():
+    """从时迁主控台向 Promise 主控台 (:7100) 发送状态检查、任务指令、目标地址切换或紧急停止。"""
+    body = request.get_json(silent=True) or {}
+    action = str(body.get("action") or "").strip().lower()
+    pb = _promise_cfg()
+
+    if action in ("status", "check", "ping"):
+        snap = _probe_promise(full=True)
+        add_log(f"[promise] 状态巡检 {pb['url']} -> {'在线' if snap['connected'] else snap['error']}")
+        return jsonify({
+            "ok": snap["connected"],
+            "action": "status",
+            "data": snap,
+            "msg": f"Promise 在线（延迟 {snap['latency_ms']} ms）" if snap["connected"] else f"Promise 未连通：{snap['error']}",
+        }), (200 if snap["connected"] else 503)
+
+    if action == "set_url":
+        new_url = str(body.get("url") or "").strip().rstrip("/")
+        if not new_url or not re.match(r"^https?://[A-Za-z0-9._-]+(?::\d{1,5})?$", new_url):
+            return jsonify({"ok": False, "msg": "请输入合法的 http(s)://主机:端口 地址（如 http://127.0.0.1:7100 或 http://100.x.x.x:7100）"}), 400
+        if "@" in new_url:
+            return jsonify({"ok": False, "msg": "禁止在 URL 中包含明文凭据"}), 400
+        problems = save_config({"promise_bridge": {"url": new_url}})
+        if problems:
+            return jsonify({"ok": False, "msg": "；".join(problems)}), 400
+        _PROMISE_STATUS_CACHE["ts"] = 0.0
+        snap = _probe_promise(full=True)
+        add_log(f"[promise] 已切换 Promise 目标地址为 {new_url}（{'已连通' if snap['connected'] else '暂未连通'}）")
+        return jsonify({
+            "ok": True,
+            "action": "set_url",
+            "data": snap,
+            "msg": f"已切换至 {new_url}" + (f"（在线 · {snap['latency_ms']}ms）" if snap["connected"] else "（当前未响应）"),
+        })
+
+    if not pb["enabled"]:
+        return jsonify({"ok": False, "msg": "Promise 桥接已在配置中禁用"}), 400
+
+    if action in ("emergency_stop", "stop", "freeze"):
+        reason = str(body.get("reason") or "remote_emergency_stop_from_shiqian").strip()[:180]
+        also_local = bool(body.get("also_stop_local", False))
+        local_stopped = False
+        if also_local:
+            try:
+                LOCAL.post(_motion_base() + "/stop", timeout=2.0)
+            except Exception:
+                pass
+            api_stop()
+            local_stopped = True
+            add_log("[promise] 双端急停：已停止本机时迁动作桥与全部托管模块")
+
+        headers = _promise_outgoing_headers(pb, include_custom_channel=True)
+        payload = {"actor": "shiqian.console", "reason": reason}
+        try:
+            r = LOCAL.post(pb["url"] + "/api/devices/emergency-stop", json=payload, headers=headers, timeout=4.0)
+            if r.status_code == 401 and pb.get("promise_auth_header"):
+                # 若通道专属头未配对，回退仅带 X-Shiqian-Token 触发免 R2 紧急制动
+                fallback_hdrs = _promise_outgoing_headers(pb, include_custom_channel=False)
+                r = LOCAL.post(pb["url"] + "/api/devices/emergency-stop", json=payload, headers=fallback_hdrs, timeout=4.0)
+            rj = r.json() if r.content else {}
+            if 200 <= r.status_code < 300:
+                _PROMISE_STATUS_CACHE["ts"] = 0.0
+                add_log(f"[promise] 已触发 Promise 紧急停止（{pb['url']}）")
+                return jsonify({
+                    "ok": True,
+                    "action": "emergency_stop",
+                    "data": {"promise_response": rj, "local_stopped": local_stopped},
+                    "msg": "已向 Promise 执行紧急停止" + ("，并同步停止本机全部模块" if local_stopped else ""),
+                })
+            return jsonify({
+                "ok": False,
+                "action": "emergency_stop",
+                "data": {"promise_response": rj, "local_stopped": local_stopped},
+                "msg": f"Promise 返回 HTTP {r.status_code}：{rj.get('detail') or r.text[:120]}",
+            }), 502
+        except Exception as e:
+            return jsonify({
+                "ok": False,
+                "action": "emergency_stop",
+                "data": {"local_stopped": local_stopped},
+                "msg": f"无法连接 Promise ({pb['url']})：{type(e).__name__}" + ("（本机模块已先行急停）" if local_stopped else ""),
+            }), 503
+
+    if action in ("task", "command", "dispatch"):
+        command = str(body.get("command") or body.get("instruction") or "").strip()
+        if not command:
+            return jsonify({"ok": False, "msg": "任务指令内容不能为空"}), 400
+        if len(command) > 500:
+            return jsonify({"ok": False, "msg": "任务指令请控制在 500 字以内"}), 400
+        target = str(body.get("target") or "agent.jinyan").strip()
+        if target not in ("agent.jinyan", "agent.xingluo", "workbench.dev"):
+            target = "agent.jinyan"
+        risk_tier = str(body.get("risk_tier") or "R0").strip().upper()
+        if risk_tier not in ("R0", "R1", "R2"):
+            risk_tier = "R0"
+
+        headers = _promise_outgoing_headers(pb, include_custom_channel=True)
+        custom_hdr = pb.get("promise_auth_header") or ""
+        try:
+            # 1) 若配置了 Mobile / Pet 专属通道令牌，优先走对应受控命令端点
+            if custom_hdr == "X-Mobile-Token" and _bridge_expected_token(pb):
+                r = LOCAL.post(
+                    pb["url"] + "/api/mobile/command",
+                    json={"target": target, "command": command, "risk_tier": risk_tier, "requires_r2": risk_tier == "R2"},
+                    headers=headers,
+                    timeout=5.0,
+                )
+                if 200 <= r.status_code < 300:
+                    rj = r.json() if r.content else {}
+                    add_log(f"[promise] 已通过 Mobile 通道向 {target} 下发指令（{len(command)} 字）")
+                    return jsonify({"ok": True, "action": "task", "data": rj, "msg": f"指令已送达 Promise ({target})"})
+
+            if custom_hdr == "X-Pet-Token" and _bridge_expected_token(pb):
+                r = LOCAL.post(
+                    pb["url"] + "/api/pet/command",
+                    json={"target": target if target != "workbench.dev" else "bridge.orchestrator", "command": command, "risk_tier": risk_tier},
+                    headers=headers,
+                    timeout=5.0,
+                )
+                if 200 <= r.status_code < 300:
+                    rj = r.json() if r.content else {}
+                    add_log(f"[promise] 已通过 Pet 通道向 {target} 下发指令（{len(command)} 字）")
+                    return jsonify({"ok": True, "action": "task", "data": rj, "msg": f"指令已送达 Promise ({target})"})
+
+            # 2) 探测 Promise 扩展桥接端点 /api/shiqian/control（若对端提供）
+            base_hdrs = _promise_outgoing_headers(pb, include_custom_channel=False)
+            rs = LOCAL.post(
+                pb["url"] + "/api/shiqian/control",
+                json={"action": "task", "target": target, "command": command, "risk_tier": risk_tier},
+                headers=base_hdrs,
+                timeout=3.5,
+            )
+            if 200 <= rs.status_code < 300:
+                rj = rs.json() if rs.content else {}
+                add_log(f"[promise] 已向 Promise 桥接端点下发任务 -> {target}（{len(command)} 字）")
+                return jsonify({"ok": True, "action": "task", "data": rj, "msg": f"任务已送达 Promise ({target})"})
+
+            # 3) 标准 Promise Core (:7100) 协同通道：写入审计链并实时推送 SSE 状态事件到 Promise 工作台
+            agent_key = "xingluo" if "xingluo" in target else "jinyan"
+            ra = LOCAL.post(
+                pb["url"] + "/api/dev/agent-state",
+                json={
+                    "agent": agent_key,
+                    "state": "bridging",
+                    "detail": f"[时迁远程指令 -> {target}] {command}"[:200],
+                },
+                headers=base_hdrs,
+                timeout=4.0,
+            )
+            if 200 <= ra.status_code < 300:
+                rj = ra.json() if ra.content else {}
+                add_log(f"[promise] 已向 Promise ({agent_key}) 同步远程任务事件（{len(command)} 字）")
+                return jsonify({
+                    "ok": True,
+                    "action": "task",
+                    "data": rj,
+                    "msg": f"任务指令已同步至 Promise 主控台（{target}）",
+                })
+            return jsonify({
+                "ok": False,
+                "action": "task",
+                "msg": f"Promise 返回 HTTP {ra.status_code}：{ra.text[:120]}",
+            }), 502
+        except Exception as e:
+            return jsonify({
+                "ok": False,
+                "action": "task",
+                "msg": f"连接 Promise 失败 ({pb['url']})：{type(e).__name__}",
+            }), 503
+
+    return jsonify({"ok": False, "msg": f"不支持的远程控制动作：{action}（支持 status / task / emergency_stop / set_url）"}), 400
+
+
+@app.route("/api/bridge/status", methods=["GET"])
+def api_bridge_inbound_status():
+    """供 Promise 主控台或跨设备节点（携带 X-Shiqian-Token）读取时迁实时状态。"""
+    resp = api_status()
+    payload = resp.get_json() if hasattr(resp, "get_json") else {}
+    return jsonify({
+        "ok": True,
+        "service": "shiqian_console",
+        "version": "1.1.1",
+        "data": (payload or {}).get("data", {}),
+        "msg": "时迁主控台在线",
+    })
+
+
+@app.route("/api/bridge/control", methods=["POST"])
+def api_bridge_inbound_control():
+    """供 Promise 主控台或跨端节点（携带 X-Shiqian-Token）反向操控时迁主控台。"""
+    body = request.get_json(silent=True) or {}
+    action = str(body.get("action") or "").strip().lower()
+
+    if action in ("status", "ping"):
+        return api_bridge_inbound_status()
+
+    if action in ("emergency_stop", "stop", "stop_all"):
+        try:
+            LOCAL.post(_motion_base() + "/stop", timeout=2.0)
+        except Exception:
+            pass
+        api_stop()
+        add_log(f"[bridge] 收到跨端紧急停止指令（来源 {request.remote_addr}），已停止全部模块")
+        return jsonify({"ok": True, "action": "emergency_stop", "msg": "时迁主控台已执行紧急停止"})
+
+    if action in ("start", "start_all"):
+        add_log(f"[bridge] 收到跨端一键启动指令（来源 {request.remote_addr}）")
+        return api_start()
+
+    if action == "restart_module":
+        mod_name = str(body.get("module") or "").strip()
+        add_log(f"[bridge] 收到跨端重启模块 [{mod_name}] 指令（来源 {request.remote_addr}）")
+        return api_module_restart(mod_name)
+
+    if action == "tts":
+        text = str(body.get("text") or body.get("command") or "").strip()
+        if not text:
+            return jsonify({"ok": False, "msg": "播报内容不能为空"}), 400
+        try:
+            r = LOCAL.post(_sensor_base() + "/tts", json={"text": text}, timeout=8.0)
+            add_log(f"[bridge] 跨端触发机器人 TTS 播报（{len(text)} 字）")
+            return Response(r.content, status=r.status_code, content_type="application/json; charset=utf-8")
+        except Exception as e:
+            return jsonify({"ok": False, "msg": f"TTS 播报失败：{type(e).__name__}"}), 503
+
+    if action == "say":
+        return api_say()
+
+    return jsonify({"ok": False, "msg": f"未知桥接动作：{action}"}), 400
+
+
 @app.route("/api/logs", methods=["GET"])
 def api_logs():
     with logs_lock:
@@ -2464,12 +3133,52 @@ def api_logs():
     return jsonify({"ok": True, "data": recent, "msg": "获取日志成功",
                     "capacity": LOG_MAX, "total_kept": len(recent)})
 
+
+def _start_extra_listener(bind_ip, port):
+    from werkzeug.serving import make_server
+    srv = make_server(bind_ip, port, app, threaded=True)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    return srv
+
+
 if __name__ == "__main__":
     cfg = load_config()
-    port = cfg.get("server", {}).get("consoleport", 5000)
-    # 这个控制台没有登录体系，默认只监听本机回环地址：
-    # 想给同一局域网的平板/手机看，再显式设置 SHIQIAN_CONSOLE_HOST=0.0.0.0。
-    host = os.environ.get("SHIQIAN_CONSOLE_HOST") or cfg.get("server", {}).get("host") or "127.0.0.1"
-    add_log(f"时迁主控台 1.1.0 后端启动中，监听 {host}:{port}")
+    port = int((cfg.get("server") or {}).get("consoleport") or 5000)
+    pb = _promise_cfg(cfg)
+    raw_host = pb["bind_host"]
+    ok_h, target_host, err_h = _validate_bind_host(raw_host, pb["allow_tailscale"])
+    if not ok_h:
+        add_log(f"[安全] {err_h}，已回退监听 127.0.0.1")
+        target_host = "127.0.0.1"
+
+    extra_bound = []
+    primary_host = "127.0.0.1"
+    if target_host == "0.0.0.0":
+        primary_host = "0.0.0.0"
+    elif target_host == "tailscale":
+        ts_ips = _detect_tailscale_ips(force=True)
+        for tip in ts_ips:
+            try:
+                _start_extra_listener(tip, port)
+                extra_bound.append(f"{tip}:{port}")
+            except Exception as exc:
+                add_log(f"[网络] Tailscale 网卡 {tip}:{port} 监听失败：{exc}")
+        if not extra_bound:
+            add_log("[网络] 未检测到活动的 Tailscale (100.x) 网卡，当前仅监听 127.0.0.1")
+    elif target_host != "127.0.0.1":
+        try:
+            _start_extra_listener(target_host, port)
+            extra_bound.append(f"{target_host}:{port}")
+        except Exception as exc:
+            add_log(f"[网络] 额外监听 {target_host}:{port} 失败（{exc}），保留 127.0.0.1:{port}")
+
+    token_configured = bool(_bridge_expected_token(pb))
+    listen_desc = f"{primary_host}:{port}" + (f" + {', '.join(extra_bound)}" if extra_bound else "")
+    add_log(f"时迁主控台 1.1.0 后端启动中，监听 {listen_desc}")
+    add_log(
+        f"[桥接] Promise 目标：{pb['url']} | 鉴权头：{SHIQIAN_TOKEN_HEADER} "
+        f"({pb['token_env']}={'已配置' if token_configured else '未设置'})"
+    )
     add_log(f"[配置] 密钥存放位置：{secret_backend()}；config.yaml 不含任何密钥")
-    app.run(host=host, port=port, debug=False)
+    app.run(host=primary_host, port=port, debug=False, threaded=True)

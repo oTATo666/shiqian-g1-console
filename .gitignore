@@ -35,10 +35,11 @@ secrets.*
 *.p12
 *.pfx
 
-# Build artifacts
+# Build artifacts / upload helpers
 dist/
 build/
 *.zip
+.gh_upload_checkpoint.json
 *.7z
 *.tar.gz
 

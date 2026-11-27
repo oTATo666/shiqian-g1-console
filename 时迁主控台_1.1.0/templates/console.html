@@ -145,6 +145,65 @@
         .rcpt-code { font-size:22px; font-weight:800; letter-spacing:4px; color:#0f172a;
                      font-variant-numeric:tabular-nums; margin:2px 0 6px; }
         .rcpt-foot { font-size:10.5px; color:#94a3b8; line-height:1.6; }
+        /* ---- 全局顶部栏：Promise 主控台跨端桥接 & 快捷远程控制 ---- */
+        .prm-shell { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
+        .prm-topbar { min-height:56px; background:rgba(255,255,255,.94); backdrop-filter:blur(10px);
+                      border-bottom:1px solid rgba(226,232,240,.9); padding:8px 28px;
+                      display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; z-index:20; }
+        .prm-bar-group { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .prm-node-tag { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#64748b;
+                        background:#f8fafc; border:1px solid #e2e8f0; border-radius:999px; padding:4px 11px; }
+        .prm-ts-chip { display:none; align-items:center; gap:5px; font-size:11.5px; font-weight:600;
+                       color:#4338ca; background:#eef2ff; border:1px solid #c7d2fe; border-radius:999px;
+                       padding:4px 10px; cursor:pointer; }
+        .prm-ts-chip:hover { background:#e0e7ff; }
+        .prm-pill { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600;
+                    padding:5px 12px; border-radius:999px; background:#f8fafc; color:#475569;
+                    border:1px solid #e2e8f0; cursor:pointer; transition:.15s; user-select:none; }
+        .prm-pill:hover { border-color:#cbd5e1; background:#f1f5f9; }
+        .prm-pill.online { background:#ecfdf5; color:#065f46; border-color:#a7f3d0; }
+        .prm-pill.frozen { background:#fef3c7; color:#92400e; border-color:#fde68a; }
+        .prm-pill.offline { background:#f8fafc; color:#64748b; border-color:#e2e8f0; }
+        .prm-dot { width:8px; height:8px; border-radius:50%; background:#94a3b8; flex:0 0 auto; }
+        .prm-dot.online { background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.2); }
+        .prm-dot.frozen { background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.22); }
+        .prm-dot.offline { background:#94a3b8; }
+        .prm-btn { display:inline-flex; align-items:center; gap:5px; font-size:12.5px; font-weight:600;
+                   padding:6px 12px; border-radius:10px; border:1px solid #e2e8f0; background:#fff;
+                   color:#334155; text-decoration:none; cursor:pointer; transition:.15s; white-space:nowrap; }
+        .prm-btn:hover { background:#f8fafc; border-color:#cbd5e1; }
+        .prm-btn.primary { background:#4f46e5; border-color:#4f46e5; color:#fff; }
+        .prm-btn.primary:hover { background:#4338ca; border-color:#4338ca; }
+        .prm-btn.danger { background:#dc2626; border-color:#dc2626; color:#fff; }
+        .prm-btn.danger:hover { background:#b91c1c; border-color:#b91c1c; }
+        .prm-btn.warn { background:#fff1f2; border-color:#fecdd3; color:#be123c; }
+        .prm-btn.warn:hover { background:#ffe4e6; }
+        .prm-drawer { display:none; background:#fff; border-bottom:1px solid #e2e8f0;
+                      box-shadow:0 12px 28px -10px rgba(15,23,42,.1); padding:16px 28px; z-index:19; }
+        .prm-drawer.open { display:block; }
+        .prm-drawer-grid { max-width:64rem; margin:0 auto; display:grid; grid-template-columns:1.05fr 1.25fr; gap:18px; }
+        .prm-panel-box { background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:14px 16px; }
+        .prm-panel-title { font-size:13px; font-weight:700; color:#0f172a; display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+        .prm-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px; }
+        .prm-input { flex:1; min-width:150px; font-size:12.5px; padding:7px 10px; border:1px solid #cbd5e1;
+                     border-radius:9px; background:#fff; color:#1e293b; outline:none; }
+        .prm-input:focus { border-color:#6366f1; }
+        .prm-chip-btn { font-size:11.5px; padding:3px 9px; border-radius:999px; border:1px solid #cbd5e1;
+                        background:#fff; color:#475569; cursor:pointer; }
+        .prm-chip-btn:hover { border-color:#818cf8; color:#4338ca; background:#eef2ff; }
+        .prm-meta-line { font-size:12px; color:#64748b; line-height:1.6; }
+        .prm-mobile-nav { display:none; font-size:12.5px; font-weight:600; padding:5px 9px; border-radius:9px;
+                          border:1px solid #cbd5e1; background:#fff; color:#1e293b; }
+        @media (max-width: 960px) {
+            .prm-drawer-grid { grid-template-columns:1fr; }
+        }
+        @media (max-width: 820px) {
+            aside.w-60 { display:none; }
+            .prm-mobile-nav { display:inline-block; }
+            .prm-topbar { padding:8px 14px; }
+            .prm-drawer { padding:14px; }
+            main.p-8 { padding:16px !important; }
+        }
     </style>
 </head>
 <body class="theme-sakura-sage bg-slate-50 text-slate-800 font-sans antialiased selection:bg-indigo-500 selection:text-white">
@@ -219,7 +278,107 @@
             </div>
         </aside>
 
-        <!-- 右侧主内容区 -->
+        <!-- 右侧全局顶部栏 + 主内容区 -->
+        <div class="prm-shell">
+            <header class="prm-topbar">
+                <div class="prm-bar-group">
+                    <select id="prm-mobile-tab" class="prm-mobile-nav" onchange="switchTab(this.value)" aria-label="切换页面">
+                        <option value="overview">系统概览</option>
+                        <option value="processes">进程与日志</option>
+                        <option value="control">接待工作台</option>
+                        <option value="sensors">机器人传感</option>
+                        <option value="motion">动作与剪影</option>
+                        <option value="redeem">核销中心</option>
+                        <option value="demo">离线演示</option>
+                        <option value="settings">系统设置</option>
+                    </select>
+                    <span class="prm-node-tag" id="prm-local-node-tag" title="当前时迁主控台监听状态">
+                        <span>🖥️ 时迁工作台</span>
+                        <b id="prm-bind-label" style="color:#334155">127.0.0.1:5000</b>
+                    </span>
+                    <button type="button" id="prm-ts-chip" class="prm-ts-chip" onclick="copyTailscaleConsoleUrl()" title="点击复制本机 Tailscale 跨设备访问地址">
+                        <span>🔗 Tailscale:</span>
+                        <span id="prm-ts-ip-text">—</span>
+                    </button>
+                </div>
+
+                <div class="prm-bar-group">
+                    <button type="button" id="promise-status-pill" class="prm-pill offline" onclick="togglePromiseDrawer()" title="点击展开/收起 Promise 快捷远程控制面板">
+                        <span id="promise-status-dot" class="prm-dot offline"></span>
+                        <span id="promise-status-label">Promise 主控台 · 检测中</span>
+                    </button>
+                    <a id="promise-direct-link" href="http://127.0.0.1:7100/dev" target="_blank" rel="noopener" class="prm-btn primary" title="一键直达 Promise 主控台 (:7100)">
+                        <span>↗ Promise 主控台</span>
+                    </a>
+                    <a id="promise-mobile-link" href="http://127.0.0.1:7100/mobile" target="_blank" rel="noopener" class="prm-btn" title="打开 Promise 跨端手机控制台 (/mobile)">
+                        <span>📱 手机端</span>
+                    </a>
+                    <button type="button" id="promise-drawer-btn" class="prm-btn" onclick="togglePromiseDrawer()">
+                        <span>⚡ 远程操控 ▾</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- 快捷远程控制抽屉面板（支持跨设备 Tailscale 切换操控、任务下发、紧急停止） -->
+            <div id="promise-drawer" class="prm-drawer">
+                <div class="prm-drawer-grid">
+                    <!-- 左栏：节点切换 & X-Shiqian-Token 会话口令 -->
+                    <div class="prm-panel-box">
+                        <div class="prm-panel-title">
+                            <span>🌐 跨设备链路与安全鉴权</span>
+                            <span id="prm-auth-badge" class="g1-badge">本机免密 / 远程受控</span>
+                        </div>
+                        <div id="prm-telemetry-line" class="prm-meta-line">
+                            Promise (:7100) 状态：正在连接检测...
+                        </div>
+                        <div class="prm-row">
+                            <span style="font-size:12px;color:#64748b">目标切换：</span>
+                            <button type="button" class="prm-chip-btn" onclick="switchPromiseTargetUrl('http://127.0.0.1:7100')">本机 127.0.0.1:7100</button>
+                            <span id="prm-ts-target-chips" style="display:inline-flex;gap:6px;flex-wrap:wrap"></span>
+                        </div>
+                        <div class="prm-row">
+                            <input type="text" id="prm-target-url" class="prm-input" placeholder="http://127.0.0.1:7100 或 http://100.x.x.x:7100">
+                            <button type="button" class="prm-btn" onclick="switchPromiseTargetUrl()">切换目标</button>
+                        </div>
+                        <div class="prm-row" style="margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0">
+                            <input type="password" id="prm-session-token" class="prm-input" placeholder="输入 X-Shiqian-Token 会话口令（仅存浏览器内存，不落盘）">
+                            <button type="button" class="prm-btn" onclick="saveSessionBridgeToken()">应用口令</button>
+                            <button type="button" class="prm-btn" onclick="clearSessionBridgeToken()">清除</button>
+                        </div>
+                    </div>
+
+                    <!-- 右栏：向 Promise 发送任务指令、状态巡检与紧急停止 -->
+                    <div class="prm-panel-box">
+                        <div class="prm-panel-title">
+                            <span>🎮 Promise 远程操控台</span>
+                            <button type="button" class="prm-chip-btn" onclick="checkPromiseNow()">🔄 立即状态检查</button>
+                        </div>
+                        <div class="prm-row" style="margin-top:2px">
+                            <span style="font-size:12px;color:#64748b">快捷指令：</span>
+                            <button type="button" class="prm-chip-btn" onclick="fillPromisePreset('同步时迁主控台今日接待与核销状态摘要')">同步今日摘要</button>
+                            <button type="button" class="prm-chip-btn" onclick="fillPromisePreset('巡检 G1 机器人传感器桥与动作桥运行健康度')">巡检桥接健康</button>
+                            <button type="button" class="prm-chip-btn" onclick="fillPromisePreset('进入跨设备协同值守模式')">协同值守模式</button>
+                        </div>
+                        <div class="prm-row">
+                            <select id="prm-cmd-target" class="g1-select" style="width:auto;min-width:148px;background:#fff">
+                                <option value="agent.jinyan">瑾妍 (agent.jinyan)</option>
+                                <option value="agent.xingluo">星落 (agent.xingluo)</option>
+                                <option value="workbench.dev">工作台 (workbench.dev)</option>
+                            </select>
+                            <input type="text" id="prm-cmd-input" class="prm-input" placeholder="输入发往 Promise 主控台的任务指令..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendPromiseTask();}">
+                            <button type="button" class="prm-btn primary" onclick="sendPromiseTask()">发送指令</button>
+                        </div>
+                        <div class="prm-row" style="justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px dashed #e2e8f0">
+                            <span id="prm-last-result" class="prm-meta-line" style="font-size:11.5px">就绪：支持跨电脑 / 手机 Tailscale 双向操控</span>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                                <button type="button" class="prm-btn warn" onclick="triggerPromiseEmergencyStop(false)">🛑 Promise 急停</button>
+                                <button type="button" class="prm-btn danger" onclick="triggerPromiseEmergencyStop(true)">🚨 双端联动急停</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         <main class="flex-1 overflow-y-auto p-8 relative">
             <div class="max-w-5xl mx-auto">
                 <!-- 视图 1：概览 -->
@@ -1052,6 +1211,51 @@
                             </div>
                         </div>
 
+                        <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h3 class="text-base font-semibold text-slate-900">分区 F：Promise 主控台跨端桥接与远程安全</h3>
+                                    <p class="text-xs text-slate-400 mt-0.5">支持本机回环 (:7100) 或 Tailscale 异地组网 (100.x.x.x:7100) 双向联动，密钥仅从系统环境变量读取，绝不写入 config.yaml。</p>
+                                </div>
+                                <button type="button" onclick="checkPromiseNow()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium shrink-0">测试 Promise 连通</button>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Promise 主控台地址 (promise_bridge.url)</label>
+                                    <input type="text" name="promise_url" placeholder="http://127.0.0.1:7100 或 http://100.x.x.x:7100" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">桥接密钥环境变量名 (promise_bridge.token_env)</label>
+                                    <input type="text" name="promise_token_env" placeholder="SHIQIAN_BRIDGE_TOKEN" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">时迁主控台监听地址 (bind_host，重启生效)</label>
+                                    <input type="text" name="promise_bind_host" placeholder="127.0.0.1 / tailscale / 100.x.x.x" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Promise 扩展鉴权通道头 (可选)</label>
+                                    <select name="promise_auth_header" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500">
+                                        <option value="">默认（仅发送 X-Shiqian-Token）</option>
+                                        <option value="X-Mobile-Token">跨端移动通道（附带 X-Mobile-Token）</option>
+                                        <option value="X-Pet-Token">本机桌面通道（附带 X-Pet-Token）</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between flex-wrap gap-3 pt-2 border-t border-slate-100">
+                                <div class="flex items-center space-x-6">
+                                    <label class="flex items-center space-x-2 text-sm text-slate-700">
+                                        <input type="checkbox" name="promise_enabled" class="rounded border-slate-300" checked>
+                                        <span>启用 Promise 桥接</span>
+                                    </label>
+                                    <label class="flex items-center space-x-2 text-sm text-slate-700">
+                                        <input type="checkbox" name="promise_allow_tailscale" class="rounded border-slate-300" checked>
+                                        <span>允许 Tailscale (100.64.0.0/10) 跨设备操控</span>
+                                    </label>
+                                </div>
+                                <span id="promise-token-env-hint" class="text-xs text-slate-500">环境变量状态检测中...</span>
+                            </div>
+                        </div>
+
                         <div class="flex justify-end space-x-3">
                             <button type="button" onclick="rollbackConfig()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-medium">回滚上次配置</button>
                             <button type="submit" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium shadow-sm shadow-indigo-200">保存全部配置</button>
@@ -1060,6 +1264,7 @@
                 </section>
             </div>
         </main>
+        </div>
     </div>
 
     <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col space-y-2"></div>
